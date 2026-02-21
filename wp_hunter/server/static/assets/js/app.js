@@ -387,6 +387,9 @@ async function initiateSystemUpdate() {
 async function refreshFavoriteSlugs() {
     try {
         const resp = await fetch('/api/favorites');
+        if (!resp.ok) {
+            throw new Error(`Failed to fetch favorites: ${resp.status}`);
+        }
         const data = await resp.json();
         window.favoriteSlugs = new Set((data.favorites || []).map(p => p.slug));
     } catch (e) {

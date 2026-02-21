@@ -18,7 +18,7 @@ import json
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 
 import requests
 
@@ -32,6 +32,14 @@ class UpdateManager:
     CHECK_INTERVAL = timedelta(minutes=30)
     DEPLOY_EXCLUDE_DIRS = {".git", "venv", "__pycache__", "sessions", "semgrep_results"}
     DEPLOY_EXCLUDE_FILES = {"wp_hunter.log", "wp_hunter.db"}
+    ALLOWED_RELEASE_HOSTS = {
+        "api.github.com",
+        "github.com",
+        "codeload.github.com",
+        "objects.githubusercontent.com",
+        "github-releases.githubusercontent.com",
+        "release-assets.githubusercontent.com",
+    }
     STATE_FILE_NAME = "update_state.json"
 
     def __init__(self) -> None:
@@ -122,6 +130,23 @@ class UpdateManager:
             "User-Agent": "WP-Hunter Update Agent",
         }
 
+    def _is_allowed_release_host(self, hostname: Optional[str]) -> bool:
+        host = (hostname or "").strip(".").lower()
+        if not host:
+            return False
+        if host in self.ALLOWED_RELEASE_HOSTS:
+            return True
+        return host.endswith(".github.com") or host.endswith(".githubusercontent.com")
+
+    def _validate_release_download_url(self, url: str) -> None:
+        parsed = urlparse(url)
+        if parsed.scheme != "https":
+            raise RuntimeError("Updater only allows HTTPS release downloads.")
+        if not self._is_allowed_release_host(parsed.hostname):
+            raise RuntimeError(
+                f"Updater blocked non-GitHub download host: {parsed.hostname or 'unknown'}"
+            )
+
     def _fetch_release(self, force: bool = False) -> Dict:
         with self._lock:
             now = datetime.utcnow()
@@ -206,13 +231,40 @@ class UpdateManager:
         fd, temp_path = tempfile.mkstemp(suffix=suffix)
         os.close(fd)
         self._set_progress("Downloading release asset…")
-        with requests.get(url, headers=self._download_headers(), stream=True, timeout=(10, 60)) as response:
-            response.raise_for_status()
-            with open(temp_path, "wb") as handle:
-                for chunk in response.iter_content(chunk_size=8192):
-                    if chunk:
-                        handle.write(chunk)
-        return Path(temp_path)
+        current_url = url
+        max_redirects = 10
+
+        try:
+            for _ in range(max_redirects):
+                self._validate_release_download_url(current_url)
+                with requests.get(
+                    current_url,
+                    headers=self._download_headers(),
+                    stream=True,
+                    timeout=(10, 60),
+                    allow_redirects=False,
+                ) as response:
+                    if response.is_redirect or response.is_permanent_redirect:
+                        location = response.headers.get("Location")
+                        if not location:
+                            raise RuntimeError(
+                                "Updater received redirect without Location header."
+                            )
+                        current_url = urljoin(current_url, location)
+                        self._validate_release_download_url(current_url)
+                        continue
+
+                    response.raise_for_status()
+                    with open(temp_path, "wb") as handle:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            if chunk:
+                                handle.write(chunk)
+                    return Path(temp_path)
+
+            raise RuntimeError("Updater exceeded maximum redirect limit.")
+        except Exception:
+            Path(temp_path).unlink(missing_ok=True)
+            raise
 
     def _extract_archive(self, archive_path: Path) -> Tuple[Path, Path]:
         extract_root = Path(tempfile.mkdtemp(prefix="wp-hunter-update-"))
@@ -254,17 +306,38 @@ class UpdateManager:
         if not requirements.exists():
             return
         self._set_progress("Installing Python dependencies…")
-        result = subprocess.run(
-            [sys.executable, "-m", "pip", "install", "-r", str(requirements)],
-            cwd=str(self.project_root),
-            capture_output=True,
-            text=True,
-        )
+        install_command = [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "--no-input",
+            "-r",
+            str(requirements),
+        ]
+        try:
+            result = subprocess.run(
+                install_command,
+                cwd=str(self.project_root),
+                capture_output=True,
+                text=True,
+                timeout=600,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(
+                "Dependency installation timed out after 10 minutes."
+            ) from exc
+        pip_stdout = (result.stdout or "").strip()
+        pip_stderr = (result.stderr or "").strip()
+        if pip_stdout:
+            logger.info("Updater pip stdout:\n%s", pip_stdout)
+        if pip_stderr:
+            logger.warning("Updater pip stderr:\n%s", pip_stderr)
         if result.returncode != 0:
             raise RuntimeError(
                 "Dependency installation failed:\n"
-                f"{result.stdout.strip()}\n"
-                f"{result.stderr.strip()}"
+                f"{pip_stdout}\n"
+                f"{pip_stderr}"
             )
         self._set_progress("Dependencies installed.")
 

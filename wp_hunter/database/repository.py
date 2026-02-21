@@ -5,7 +5,7 @@ CRUD operations for scan sessions and results.
 """
 
 import json
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Set, Tuple
 from pathlib import Path
 
 from wp_hunter.database.models import get_db, init_db
@@ -238,23 +238,59 @@ class ScanRepository:
             }
 
     def get_all_sessions(self, limit: int = 50) -> List[Dict[str, Any]]:
-        """Get all scan sessions, most recent first."""
+        """Get scan sessions, deduplicated by identical result slug-set, most recent first."""
         with get_db(self.db_path) as conn:
             cursor = conn.cursor()
+            # Over-fetch, then deduplicate in memory so we can still return up to `limit` unique sessions.
             cursor.execute(
                 """
-                SELECT * FROM scan_sessions 
-                ORDER BY created_at DESC 
+                SELECT * FROM scan_sessions
+                ORDER BY created_at DESC
                 LIMIT ?
             """,
-                (limit,),
+                (max(limit * 4, 200),),
             )
 
-            sessions = []
-            for row in cursor.fetchall():
+            rows = cursor.fetchall()
+            if not rows:
+                return []
+
+            # Build slug sets for sessions in one query.
+            session_ids = [row["id"] for row in rows]
+            placeholders = ",".join(["?"] * len(session_ids))
+            cursor.execute(
+                f"""
+                SELECT session_id, slug
+                FROM scan_results
+                WHERE session_id IN ({placeholders})
+            """,
+                session_ids,
+            )
+
+            slugs_by_session: Dict[int, Set[str]] = {}
+            for rr in cursor.fetchall():
+                sid = rr["session_id"]
+                slugs_by_session.setdefault(sid, set()).add(rr["slug"])
+
+            sessions: List[Dict[str, Any]] = []
+            seen_signatures: Set[Tuple[bool, Tuple[str, ...]]] = set()
+
+            for row in rows:
+                sid = row["id"]
+                slug_signature = tuple(sorted(slugs_by_session.get(sid, set())))
+                has_results = len(slug_signature) > 0
+                signature = (has_results, slug_signature)
+
+                # Only deduplicate completed sessions with actual results.
+                # Keep all failed/running/empty-result sessions visible.
+                if row["status"] == ScanStatus.COMPLETED.value and has_results:
+                    if signature in seen_signatures:
+                        continue
+                    seen_signatures.add(signature)
+
                 sessions.append(
                     {
-                        "id": row["id"],
+                        "id": sid,
                         "created_at": row["created_at"],
                         "status": row["status"],
                         "config": json.loads(row["config_json"])
@@ -265,6 +301,9 @@ class ScanRepository:
                         "error_message": row["error_message"],
                     }
                 )
+
+                if len(sessions) >= limit:
+                    break
 
             return sessions
 

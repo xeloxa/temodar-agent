@@ -3,6 +3,57 @@ let currentScanId = null;
 let socket = null;
 let detailsPollingInterval = null; // Polling interval for scan details
 window.currentScanResults = []; // Store results for modal access
+window.favoriteSlugs = new Set(); // Fast lookup for favorite state
+
+// Prevent stale API responses that force manual F5
+const _nativeFetch = window.fetch.bind(window);
+window.fetch = function(resource, options = {}) {
+    const isApiCall = typeof resource === 'string' && resource.startsWith('/api/');
+    if (!isApiCall) return _nativeFetch(resource, options);
+
+    const headers = { ...(options.headers || {}) };
+    if (!headers['Cache-Control']) headers['Cache-Control'] = 'no-cache';
+    if (!headers['Pragma']) headers['Pragma'] = 'no-cache';
+
+    return _nativeFetch(resource, {
+        ...options,
+        cache: 'no-store',
+        headers
+    });
+};
+
+function isDetailsViewActive() {
+    const detailsView = document.getElementById('scan-details-view');
+    return !!detailsView && detailsView.style.display !== 'none';
+}
+
+function apiNoCacheUrl(path) {
+    const sep = path.includes('?') ? '&' : '?';
+    return `${path}${sep}_ts=${Date.now()}`;
+}
+
+function refreshAfterScanEvent(sessionId) {
+    loadHistory();
+    if (!sessionId) return;
+
+    // If user is already on this scan details view, force-refresh it after DB flush.
+    if (isDetailsViewActive() && currentScanId === sessionId) {
+        setTimeout(() => { if (currentScanId === sessionId) viewScan(sessionId); }, 250);
+        setTimeout(() => { if (currentScanId === sessionId) viewScan(sessionId); }, 1200);
+    }
+}
+
+async function syncFinalScanResults(sessionId, expectedCount = 0) {
+    if (!sessionId) return;
+    const targetCount = parseInt(expectedCount || 0);
+    for (let i = 0; i < 6; i++) {
+        if (currentScanId !== sessionId) return;
+        await viewScan(sessionId);
+        const currentCount = (window.currentScanResults || []).length;
+        if (targetCount <= 0 || currentCount >= targetCount) return;
+        await new Promise(r => setTimeout(r, 350 * (i + 1)));
+    }
+}
 
 // Custom Confirm Implementation
 window.showConfirm = function(message) {
@@ -117,6 +168,21 @@ function escapeHtml(text) {
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
+}
+
+async function refreshFavoriteSlugs() {
+    try {
+        const resp = await fetch('/api/favorites');
+        const data = await resp.json();
+        window.favoriteSlugs = new Set((data.favorites || []).map(p => p.slug));
+    } catch (e) {
+        console.error('Failed to refresh favorites:', e);
+        window.favoriteSlugs = new Set();
+    }
+}
+
+function isFavoriteSlug(slug) {
+    return window.favoriteSlugs instanceof Set && window.favoriteSlugs.has(slug);
 }
 
 
@@ -439,7 +505,7 @@ function handleMessage(msg) {
             logTerminal('Scan execution started...', 'info');
             break;
         case 'result':
-            logTerminal(`${msg.data.score >= 50 ? '[HIGH RISK]' : '[INFO]'} Found: ${msg.data.slug} (Score: ${msg.data.score})`, msg.data.score >= 50 ? 'high-risk' : 'low-risk');
+            logTerminal(`${msg.data.score >= 40 ? '[HIGH RISK]' : '[INFO]'} Found: ${msg.data.slug} (Score: ${msg.data.score})`, msg.data.score >= 40 ? 'high-risk' : 'low-risk');
             document.getElementById('scan-found').textContent = msg.found_count;
             break;
         case 'deduplicated':
@@ -450,7 +516,7 @@ function handleMessage(msg) {
             document.getElementById('scan-status').className = 'info-value completed';
             runBtn.disabled = false;
             runBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg><span>RUN SCAN</span>';
-            loadHistory();
+            refreshAfterScanEvent(currentScanId);
             break;
         case 'complete':
             logTerminal(`Scan completed. Found: ${msg.total_found}, High Risk: ${msg.high_risk_count}`, 'success');
@@ -458,7 +524,10 @@ function handleMessage(msg) {
             document.getElementById('scan-status').className = 'info-value completed';
             runBtn.disabled = false;
             runBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg><span>RUN SCAN</span>';
-            loadHistory();
+            refreshAfterScanEvent(currentScanId);
+            if (currentScanId) {
+                syncFinalScanResults(currentScanId, msg.total_found);
+            }
             // Stop polling when scan completes
             if (detailsPollingInterval) {
                 clearInterval(detailsPollingInterval);
@@ -471,6 +540,7 @@ function handleMessage(msg) {
             document.getElementById('scan-status').className = 'info-value failed';
             runBtn.disabled = false;
             runBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg><span>RUN SCAN</span>';
+            refreshAfterScanEvent(currentScanId);
             // Stop polling on error
             if (detailsPollingInterval) {
                 clearInterval(detailsPollingInterval);
@@ -525,7 +595,7 @@ window.loadHistory = async function() {
     if (!list) return;
     
     try {
-        const response = await fetch('/api/scans');
+        const response = await fetch(apiNoCacheUrl('/api/scans'));
         const data = await response.json();
         const sessions = data.sessions.sort((a, b) => new Date(b.created_at || b.start_time) - new Date(a.created_at || a.start_time));
         list.innerHTML = sessions.map(s => `
@@ -581,7 +651,7 @@ window.loadFavorites = async function() {
             <tr>
                 <td style="color: #fff;">${escapeHtml(r.slug)}</td>
                 <td>${escapeHtml(r.version)}</td>
-                <td><span class="${r.score >= 50 ? 'risk-high' : 'risk-low'}">${r.score}</span></td>
+                <td><span class="${r.score >= 40 ? 'risk-high' : (r.score >= 20 ? 'risk-medium' : 'risk-low')}">${r.score}</span></td>
                 <td>
                     <div style="display: flex; gap: 8px; align-items: center;">
                         <button onclick="openPluginModal(${index})" class="action-btn" style="height: 28px; padding: 0 12px; background: var(--accent-primary); color: #000; font-size: 10px; font-weight: 700; border-radius: 2px;">DETAILS</button>
@@ -603,12 +673,17 @@ window.removeFromFavorites = async function(slug) {
     const confirmed = await showConfirm('Remove from favorites?');
     if(!confirmed) return;
     await fetch(`/api/favorites/${slug}`, {method: 'DELETE'});
+    window.favoriteSlugs.delete(slug);
     loadFavorites();
 }
 
 window.toggleFavorite = async function(slug) {
     const plugin = window.currentScanResults.find(p => p.slug === slug);
-    if (plugin) {
+    if (!plugin) return;
+
+    const isAlreadyFavorite = isFavoriteSlug(slug);
+
+    if (!isAlreadyFavorite) {
         const response = await fetch('/api/favorites', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -616,14 +691,21 @@ window.toggleFavorite = async function(slug) {
         });
         const res = await response.json();
         if (res.success) {
+            window.favoriteSlugs.add(slug);
             showToast('Plugin added to favorites', 'success');
         } else {
-            const confirmed = await showConfirm('This plugin is already in favorites. Remove it?');
-            if(confirmed) {
-                await fetch(`/api/favorites/${slug}`, {method: 'DELETE'});
-                showToast('Plugin removed from favorites', 'info');
-            }
+            showToast('Failed to add favorite', 'error');
         }
+    } else {
+        const confirmed = await showConfirm('Remove from favorites?');
+        if (!confirmed) return;
+        await fetch(`/api/favorites/${slug}`, {method: 'DELETE'});
+        window.favoriteSlugs.delete(slug);
+        showToast('Plugin removed from favorites', 'info');
+    }
+
+    if (currentScanId) {
+        viewScan(currentScanId);
     }
 }
 
@@ -746,7 +828,7 @@ window.viewScan = async function(id) {
         .catch(() => {});
 
     try {
-        const sessionResp = await fetch(`/api/scans/${id}`);
+        const sessionResp = await fetch(apiNoCacheUrl(`/api/scans/${id}`));
         const session = await sessionResp.json();
 
         const config = session.config || {};
@@ -776,9 +858,10 @@ window.viewScan = async function(id) {
             ${configHtml}
         `;
 
-        const resultsResp = await fetch(`/api/scans/${id}/results?limit=500`);
+        const resultsResp = await fetch(apiNoCacheUrl(`/api/scans/${id}/results?limit=500`));
         const resultsData = await resultsResp.json();
         window.currentScanResults = resultsData.results || [];
+        await refreshFavoriteSlugs();
 
         if (window.currentScanResults.length > 0) {
             list.innerHTML = window.currentScanResults.map((r, index) => {
@@ -796,16 +879,24 @@ window.viewScan = async function(id) {
                     }
                 }
 
+                const riskClass = (
+                    r.relative_risk === 'CRITICAL' || r.relative_risk === 'HIGH'
+                ) ? 'risk-high' : (
+                    r.relative_risk === 'MEDIUM'
+                ) ? 'risk-medium' : (
+                    r.score >= 40 ? 'risk-high' : (r.score >= 20 ? 'risk-medium' : 'risk-low')
+                );
+
                 return `
                 <tr>
                     <td style="color: #fff; font-weight: 500;">${escapeHtml(r.slug)} ${r.is_duplicate ? '<span style="background: rgba(100,100,100,0.3); color: #aaa; padding: 2px 4px; border-radius: 2px; font-size: 9px; margin-left: 5px;">SEEN BEFORE</span>' : ''}</td>
                     <td>${escapeHtml(r.version)}</td>
-                    <td><span class="${r.score >= 50 ? 'risk-high' : (r.score > 20 ? 'risk-medium' : 'risk-low')}">${r.score}</span></td>
+                    <td><span class="${riskClass}">${r.score}</span></td>
                     <td>${r.days_since_update} days</td>
                     <td>${r.installations}+</td>
                     <td style="display: flex; gap: 5px; align-items: center;">
                         ${semgrepBadge}
-                        <button onclick="toggleFavorite('${escapeHtml(r.slug)}')" class="action-btn" style="height: 24px; width: 24px; padding: 0; background: transparent; border: 1px solid var(--border-color); color: #666;" title="Add to Favorites">
+                        <button onclick="toggleFavorite('${escapeHtml(r.slug)}')" class="action-btn" style="height: 24px; width: 24px; padding: 0; background: ${isFavoriteSlug(r.slug) ? 'rgba(255, 189, 46, 0.12)' : 'transparent'}; border: 1px solid ${isFavoriteSlug(r.slug) ? 'rgba(255, 189, 46, 0.45)' : 'var(--border-color)'}; color: ${isFavoriteSlug(r.slug) ? '#ffbd2e' : '#666'};" title="${isFavoriteSlug(r.slug) ? 'In Favorites' : 'Add to Favorites'}">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
                         </button>
                         <a href="${escapeHtml(r.wp_org_link || (r.is_theme ? `https://wordpress.org/themes/${r.slug}/` : `https://wordpress.org/plugins/${r.slug}/`))}" target="_blank" class="action-btn" style="height: 24px; padding: 0 8px; background: #222; color: #ccc; border: 1px solid #333;">WP</a>
@@ -819,7 +910,7 @@ window.viewScan = async function(id) {
         }
 
         // Start polling if scan is still running
-        if (session.status === 'RUNNING') {
+        if ((session.status || '').toUpperCase() === 'RUNNING') {
             if (detailsPollingInterval) clearInterval(detailsPollingInterval);
             detailsPollingInterval = setInterval(() => {
                 if (currentScanId === id) {
@@ -1209,7 +1300,14 @@ window.openPluginModal = function(index) {
             <a href="${getLink(plugin.wpscan_link, plugin.is_theme ? `https://wpscan.com/theme/${plugin.slug}` : `https://wpscan.com/plugin/${plugin.slug}`)}" target="_blank" class="ext-link">🔍 WPScan</a>
             <a href="${getLink(plugin.patchstack_link, `https://patchstack.com/database?search=${plugin.slug}`)}" target="_blank" class="ext-link">🩹 Patchstack</a>
             <a href="${getLink(plugin.wordfence_link, `https://www.wordfence.com/threat-intel/vulnerabilities/search?search=${plugin.slug}`)}" target="_blank" class="ext-link">🦁 Wordfence</a>
-            <a href="${getLink(plugin.google_dork_link, `https://www.google.com/search?q=${plugin.slug}+${plugin.is_theme ? 'theme' : 'plugin'}+site:wpscan.com+OR+site:patchstack.com+OR+site:cve.mitre.org+%22vulnerability%22`)}" target="_blank" class="ext-link">🔎 Google Dork</a>
+            <a href="${getLink(
+                plugin.google_dork_link,
+                `https://www.google.com/search?q=${encodeURIComponent(
+                    plugin.is_theme
+                        ? `"${plugin.slug}" intext:"${plugin.slug}" ("wordpress theme" OR "wp theme" OR "wordpress.org/themes/${plugin.slug}") (vulnerability OR exploit OR cve) -"wordpress plugin" -"plugins/"`
+                        : `"${plugin.slug}" intext:"${plugin.slug}" ("wordpress plugin" OR "wp plugin" OR "wordpress.org/plugins/${plugin.slug}") (vulnerability OR exploit OR cve) -"wordpress theme" -"themes/"`
+                )}`
+            )}" target="_blank" class="ext-link">🔎 Google Dork</a>
         </div>
     `;
 
@@ -1217,7 +1315,7 @@ window.openPluginModal = function(index) {
         <div style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: start;">
             <div>
                 <div style="display: flex; gap: 20px; margin-bottom: 15px; font-size: 12px; color: #888;">
-                    <span>Score: <strong style="color: ${plugin.score >= 50 ? '#ff5f56' : '#00ff9d'}">${plugin.score}/100</strong></span>
+                    <span>Score: <strong style="color: ${plugin.score >= 40 ? '#ff5f56' : (plugin.score >= 20 ? '#ffbd2e' : '#00ff9d')}">${plugin.score}/100</strong></span>
                     <span>Installs: <strong style="color: #fff">${plugin.installations}+</strong></span>
                     <span>Updated: <strong style="color: #fff">${plugin.days_since_update} days ago</strong></span>
                 </div>
@@ -1352,27 +1450,66 @@ window.loadSemgrepRules = async function() {
         // 1. RENDER RULESETS
         let html = '';
 
-        if (data.rulesets && data.rulesets.length > 0) {
-            html += `<h3 style="font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); margin-bottom: 15px; border-bottom: 1px solid #222; padding-bottom: 8px; margin-top: 10px;">📦 SECURITY RULESETS</h3>`;
-            html += data.rulesets.map(rs => `
-                <div style="background: ${!rs.enabled ? 'rgba(30, 30, 30, 0.5)' : '#141416'}; border: 1px solid ${!rs.enabled ? '#333' : 'var(--accent-blue)'}; border-radius: 4px; padding: 15px; margin-bottom: 10px; opacity: ${!rs.enabled ? '0.6' : '1'}; transition: all 0.2s;">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <div style="flex: 1;">
-                            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 5px;">
-                                <span style="font-family: var(--font-mono); font-size: 14px; color: ${!rs.enabled ? '#888' : '#fff'}; font-weight: 600;">${escapeHtml(rs.name)}</span>
-                                ${!rs.enabled ? '<span class="tag" style="font-size: 9px; background: #333;">DISABLED</span>' : '<span class="tag safe" style="font-size: 9px;">ACTIVE</span>'}
-                            </div>
-                            <div style="font-size: 11px; color: #888;">${escapeHtml(rs.description)}</div>
-                            <a href="${escapeHtml(rs.url)}" target="_blank" style="font-size: 10px; color: var(--accent-blue); text-decoration: none; margin-top: 5px; display: inline-block;">View Details ↗</a>
+        html += `<h3 style="font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); margin-bottom: 15px; border-bottom: 1px solid #222; padding-bottom: 8px; margin-top: 10px;">📦 SECURITY RULESETS</h3>`;
+        html += `<div style="display:flex; gap:10px; align-items:center; margin: -4px 0 14px 0;">
+                <input type="text" id="new-ruleset-id" placeholder="p/cwe-top-25 or p/owasp-top-ten" style="flex:1; min-width: 260px; padding: 9px 10px; background: #0a0a0a; border: 1px solid #333; border-radius: 4px; color: #fff; font-family: var(--font-mono); font-size:11px;">
+                <button onclick="addSemgrepRuleset()" class="action-btn" style="width:auto; padding:8px 12px; background: rgba(0, 255, 157, 0.1); border: 1px solid rgba(0, 255, 157, 0.35); color: var(--accent-primary); font-size:11px;">
+                    ADD RULESET
+                </button>
+            </div>`;
+        html += `<div style="margin: -4px 0 14px 0;">
+                <a href="https://semgrep.dev/explore" target="_blank" class="tag safe" style="text-decoration: none; cursor: pointer; padding: 8px 14px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; border-radius: 4px; border: 1px solid rgba(0, 255, 157, 0.3); background: rgba(0, 255, 157, 0.05); font-size: 11px;">
+                    <span>🔍</span> Explore 3000+ Community Rules on Semgrep Registry →
+                </a>
+            </div>`;
+
+        const formatRulesetLabel = (rs) => {
+            const id = String(rs?.id || '').trim();
+            if (!id) return 'p/custom';
+            if (id.startsWith('p/') || id.startsWith('r/')) return id;
+            const known = {
+                'owasp-top-ten': 'p/owasp-top-ten',
+                'php-security': 'p/php',
+                'security-audit': 'p/security-audit'
+            };
+            return known[id] || `p/${id}`;
+        };
+
+        const renderRulesetCard = (rs) => `
+                <div style="background: ${!rs.enabled ? 'rgba(30, 30, 30, 0.45)' : '#141416'}; border: 1px solid ${!rs.enabled ? '#333' : 'var(--border-color)'}; border-radius: 4px; padding: 12px 14px; margin-bottom: 8px; opacity: ${!rs.enabled ? '0.7' : '1'};">
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap: 10px;">
+                        <div style="display:inline-flex; align-items:center; gap:8px; min-width: 0;">
+                            <span title="${escapeHtml(rs.id)}" style="font-family: var(--font-mono); font-size: 13px; color: ${!rs.enabled ? '#9a9a9a' : '#fff'}; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(formatRulesetLabel(rs))}</span>
+                            <a href="${escapeHtml(rs.url)}" target="_blank" style="font-size: 10px; color: var(--accent-blue); text-decoration: none; white-space: nowrap;">View ↗</a>
                         </div>
-                        <div style="margin-left: 15px;">
-                            <button onclick="toggleRuleset('${escapeHtml(rs.id)}')" class="action-btn" style="width: 40px; height: 32px; padding: 0; background: ${!rs.enabled ? 'rgba(0, 255, 157, 0.1)' : 'rgba(255, 95, 86, 0.1)'}; color: ${!rs.enabled ? 'var(--accent-primary)' : '#ff5f56'}; border: 1px solid ${!rs.enabled ? 'rgba(0, 255, 157, 0.3)' : 'rgba(255, 95, 86, 0.3)'};" title="${!rs.enabled ? 'Enable Ruleset' : 'Disable Ruleset'}">
-                                ${!rs.enabled ? 'ON' : 'OFF'}
+                        <div style="display:inline-flex; align-items:center; gap:6px;">
+                            <button onclick="toggleRuleset('${escapeHtml(rs.id)}')" class="action-btn" title="${rs.enabled ? 'Set Disabled' : 'Set Active'}" style="width: 32px; height: 18px; border-radius: 20px; padding: 2px; border: 1px solid ${rs.enabled ? 'rgba(0,255,157,0.35)' : 'rgba(120,120,120,0.35)'}; background: ${rs.enabled ? 'rgba(0,255,157,0.85)' : 'rgba(120,120,120,0.45)'}; display:flex; align-items:center; ${rs.enabled ? 'justify-content:flex-end;' : 'justify-content:flex-start;'}">
+                                <span style="display:block; width: 14px; height: 14px; border-radius: 999px; background: #f1f1f1; box-shadow: 0 1px 2px rgba(0,0,0,0.35);"></span>
                             </button>
+                            ${rs.deletable ? `
+                            <button onclick="deleteRuleset('${escapeHtml(rs.id)}', true)" class="action-btn" style="width: 28px; height: 28px; padding: 0; background: rgba(255, 0, 85, 0.1); color: #ff0055; border: 1px solid rgba(255, 0, 85, 0.25);" title="Delete Ruleset">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                            </button>` : ''}
                         </div>
                     </div>
                 </div>
-            `).join('');
+            `;
+
+        if (data.rulesets && data.rulesets.length > 0) {
+            const coreRulesetIds = new Set(['owasp-top-ten', 'php-security', 'security-audit']);
+            const coreRulesets = data.rulesets.filter(rs => coreRulesetIds.has(String(rs.id || '').trim()));
+            const extraRulesets = data.rulesets.filter(rs => !coreRulesetIds.has(String(rs.id || '').trim()));
+
+            html += coreRulesets.map(renderRulesetCard).join('');
+
+            if (extraRulesets.length > 0) {
+                html += `<div style="margin-top: 10px; margin-bottom: 10px;">
+                    <div style="color:#888; font-size:11px; font-family:var(--font-mono); margin-bottom:8px;">Advanced / Extra Rulesets (${extraRulesets.length})</div>
+                    ${extraRulesets.map(renderRulesetCard).join('')}
+                </div>`;
+            }
+        } else {
+            html += '<div style="text-align: center; color: #666; padding: 12px; border: 1px dashed #333; border-radius: 4px; margin-bottom: 10px;">No rulesets found. Add one above (example: p/cwe-top-25).</div>';
         }
 
         // 2. RENDER CUSTOM RULES
@@ -1387,18 +1524,15 @@ window.loadSemgrepRules = async function() {
                             <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
                                 <span style="font-family: var(--font-mono); font-size: 13px; color: ${!rule.enabled ? '#888' : '#fff'}; font-weight: 600; text-decoration: ${!rule.enabled ? 'line-through' : 'none'};">${escapeHtml(rule.id)}</span>
                                 <span class="tag ${rule.severity === 'ERROR' ? 'risk' : (rule.severity === 'WARNING' ? 'warn' : '')}" style="font-size: 9px;">${escapeHtml(rule.severity)}</span>
-                                ${!rule.enabled ? '<span class="tag" style="font-size: 9px; background: #333;">DISABLED</span>' : ''}
                             </div>
                             <div style="font-size: 11px; color: #888; margin-bottom: 8px;">${escapeHtml(rule.message)}</div>
                             <div style="font-family: var(--font-mono); font-size: 10px; color: #666; background: #0a0a0a; padding: 8px; border-radius: 3px; overflow-x: auto;">
                                 ${escapeHtml(rule.pattern || 'Multiple patterns')}
                             </div>
                         </div>
-                        <div style="display: flex; gap: 5px; margin-left: 15px;">
-                            <button onclick="toggleSemgrepRule('${escapeHtml(rule.id)}')" class="action-btn" style="width: 32px; height: 32px; padding: 0; background: ${!rule.enabled ? 'rgba(0, 255, 157, 0.1)' : 'rgba(100, 100, 100, 0.2)'}; color: ${!rule.enabled ? 'var(--accent-primary)' : '#ccc'}; border: 1px solid #333;" title="${!rule.enabled ? 'Enable Rule' : 'Disable Rule'}">
-                                ${!rule.enabled
-                                    ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>'
-                                    : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>'}
+                        <div style="display: flex; gap: 6px; margin-left: 15px; align-items: center;">
+                            <button onclick="toggleSemgrepRule('${escapeHtml(rule.id)}')" class="action-btn" title="${rule.enabled ? 'Set Disabled' : 'Set Active'}" style="width: 32px; height: 18px; border-radius: 20px; padding: 2px; border: 1px solid ${rule.enabled ? 'rgba(0,255,157,0.35)' : 'rgba(120,120,120,0.35)'}; background: ${rule.enabled ? 'rgba(0,255,157,0.85)' : 'rgba(120,120,120,0.45)'}; display:flex; align-items:center; ${rule.enabled ? 'justify-content:flex-end;' : 'justify-content:flex-start;'}">
+                                <span style="display:block; width: 14px; height: 14px; border-radius: 999px; background: #f1f1f1; box-shadow: 0 1px 2px rgba(0,0,0,0.35);"></span>
                             </button>
                             <button onclick="deleteSemgrepRule('${escapeHtml(rule.id)}')" class="action-btn" style="width: 32px; height: 32px; padding: 0; background: rgba(255, 0, 85, 0.1); color: #ff0055; border: 1px solid rgba(255, 0, 85, 0.2);" title="Delete Rule">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
@@ -1435,6 +1569,64 @@ window.toggleRuleset = async function(rulesetId) {
         }
     } catch (error) {
         console.error('Error toggling ruleset:', error);
+    }
+}
+
+window.deleteRuleset = async function(rulesetId, deletable = true) {
+    if (!deletable) {
+        showToast('Built-in rulesets cannot be deleted. You can disable them with the toggle.', 'warn');
+        return;
+    }
+    const confirmed = await showConfirm(`Delete ruleset "${rulesetId}"?`);
+    if (!confirmed) return;
+    try {
+        const response = await fetch(`/api/semgrep/rulesets/${encodeURIComponent(rulesetId)}`, {
+            method: 'DELETE'
+        });
+        const data = await response.json();
+        if (data.success) {
+            showToast(`Ruleset deleted: ${rulesetId}`, 'success');
+            loadSemgrepRules();
+        } else {
+            showToast('Failed to delete ruleset: ' + (data.detail || data.error || 'Unknown error'), 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting ruleset:', error);
+        showToast('Error deleting ruleset: ' + error.message, 'error');
+    }
+}
+
+window.addSemgrepRuleset = async function() {
+    const input = document.getElementById('new-ruleset-id');
+    const ruleset = (input?.value || '').trim();
+
+    if (!ruleset) {
+        showToast('Please enter a ruleset (example: p/cwe-top-25).', 'warn');
+        return;
+    }
+
+    if (!/^[a-zA-Z0-9_./:-]+$/.test(ruleset)) {
+        showToast('Invalid ruleset format. Use values like p/cwe-top-25.', 'warn');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/semgrep/rulesets', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ruleset })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            if (input) input.value = '';
+            showToast(`Ruleset added: ${ruleset}`, 'success');
+            loadSemgrepRules();
+        } else {
+            showToast('Failed to add ruleset: ' + (data.detail || data.error || 'Unknown error'), 'error');
+        }
+    } catch (error) {
+        showToast('Error adding ruleset: ' + error.message, 'error');
     }
 }
 
@@ -1496,7 +1688,7 @@ window.addSemgrepRule = async function() {
             // Reload rules
             loadSemgrepRules();
         } else {
-            showToast('Failed to add rule: ' + (data.error || 'Unknown error'), 'error');
+            showToast('Failed to add rule: ' + (data.detail || data.error || 'Unknown error'), 'error');
         }
     } catch (error) {
         showToast('Error adding rule: ' + error.message, 'error');

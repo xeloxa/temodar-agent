@@ -3,7 +3,8 @@ Pydantic Models for API
 """
 
 from typing import Optional, List
-from pydantic import BaseModel
+from typing_extensions import Literal
+from pydantic import BaseModel, Field, HttpUrl
 
 
 class ScanRequest(BaseModel):
@@ -28,13 +29,28 @@ class ScanRequest(BaseModel):
 
 
 class DownloadRequest(BaseModel):
-    slug: str
-    download_url: str
+    slug: str = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+        pattern=r"^[a-zA-Z0-9_-]+$",
+        description="WordPress slug (letters, numbers, underscore, hyphen)",
+    )
+    download_url: HttpUrl
 
 
 class SemgrepRuleRequest(BaseModel):
-    id: str
-    pattern: str
-    message: str
-    severity: str = "WARNING"
-    languages: List[str] = ["php"]
+    id: str = Field(
+        ...,
+        min_length=1,
+        max_length=120,
+        pattern=r"^[a-zA-Z0-9_-]+$",
+    )
+    pattern: str = Field(..., min_length=1, max_length=10000)
+    message: str = Field(..., min_length=1, max_length=500)
+    severity: Literal["ERROR", "WARNING", "INFO"] = "WARNING"
+    languages: List[str] = Field(default_factory=lambda: ["php"], min_length=1)
+
+
+class SemgrepRulesetRequest(BaseModel):
+    ruleset: str = Field(..., min_length=1, max_length=200)

@@ -17,6 +17,14 @@ from wp_hunter.ui.console import (
     print_summary,
 )
 
+REPO_URL = "https://github.com/xeloxa/wp-hunter"
+
+
+def print_repo_star_line() -> None:
+    print(
+        f"{Colors.CYAN}[i] Enjoying WP-Hunter? Open the repository and leave a star: {REPO_URL}{Colors.RESET}"
+    )
+
 
 def args_to_config(args: argparse.Namespace) -> ScanConfig:
     """Convert argparse namespace to ScanConfig."""
@@ -44,6 +52,7 @@ def args_to_config(args: argparse.Namespace) -> ScanConfig:
 
 def run_theme_scan(args: argparse.Namespace) -> None:
     """Run theme scanning mode."""
+    print_repo_star_line()
     print(
         f"\n{Colors.BOLD}{Colors.MAGENTA}=== WordPress Theme Scanner ==={Colors.RESET}"
     )
@@ -64,6 +73,7 @@ def run_theme_scan(args: argparse.Namespace) -> None:
     print(
         f"{Colors.GREEN}[✓] Theme scan complete: {found_count[0]} themes analyzed{Colors.RESET}"
     )
+    print_repo_star_line()
 
     summary = scanner.get_summary()
     print_summary(summary)
@@ -71,6 +81,7 @@ def run_theme_scan(args: argparse.Namespace) -> None:
 
 def run_plugin_scan(args: argparse.Namespace) -> None:
     """Run plugin scanning mode."""
+    print_repo_star_line()
     config = args_to_config(args)
 
     # Override defaults for Abandoned Mode to be effective
@@ -190,6 +201,7 @@ def run_plugin_scan(args: argparse.Namespace) -> None:
     print(
         f"\n{Colors.GREEN}[✓] Scan completed. Total {found_count[0]} targets analyzed.{Colors.RESET}"
     )
+    print_repo_star_line()
 
     # Print summary
     if collected_results:

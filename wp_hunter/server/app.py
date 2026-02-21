@@ -7,6 +7,7 @@ REST API and WebSocket endpoints for the web dashboard.
 import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -97,6 +98,16 @@ def create_app() -> FastAPI:
     @app.websocket("/ws/scans/{session_id}")
     async def websocket_endpoint(websocket: WebSocket, session_id: int):
         """WebSocket endpoint for real-time scan updates."""
+        origin = websocket.headers.get("origin")
+        if origin:
+            try:
+                origin_host = (urlparse(origin).hostname or "").lower()
+            except Exception:
+                origin_host = ""
+            if origin_host not in {"localhost", "127.0.0.1"}:
+                await websocket.close(code=1008)
+                return
+
         await manager.connect(websocket, session_id)
         try:
             while True:

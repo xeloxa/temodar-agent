@@ -9,6 +9,7 @@ import threading
 import requests
 from typing import List, Dict, Any, Optional, Callable
 from datetime import datetime
+from urllib.parse import quote_plus
 
 from wp_hunter.logger import setup_logger
 from wp_hunter.config import (
@@ -19,6 +20,7 @@ from wp_hunter.config import (
 )
 from wp_hunter.models import ScanConfig, PluginResult
 from wp_hunter.analyzers.vps_scorer import calculate_vps_score
+from wp_hunter.analyzers.risk_labeler import apply_relative_risk_labels
 from wp_hunter.infrastructure.http_client import get_session
 from wp_hunter.utils.date_utils import calculate_days_ago
 
@@ -198,6 +200,15 @@ class PluginScanner:
             "automattic" in author_raw.lower() or "wordpress.org" in author_raw.lower()
         )
 
+        # Create plugin-focused Google dork (balanced, less noisy)
+        google_dork_query = (
+            f"\"{slug}\" "
+            f"intext:\"{slug}\" "
+            f"(\"wordpress plugin\" OR \"wp plugin\" OR \"wordpress.org/plugins/{slug}\") "
+            f"(vulnerability OR exploit OR cve) "
+            f"-\"wordpress theme\" -\"themes/\""
+        )
+
         # Create result object
         result = PluginResult(
             name=plugin.get("name", "Unknown"),
@@ -220,9 +231,7 @@ class PluginScanner:
             wpscan_link=f"https://wpscan.com/plugin/{slug}",
             patchstack_link=f"https://patchstack.com/database?search={slug}",
             wordfence_link=f"https://www.wordfence.com/threat-intel/vulnerabilities/search?search={slug}",
-            google_dork_link=f"https://www.google.com/search?q={slug}+site:wpscan.com+OR+site:patchstack.com+OR+site:cve.mitre.org+%22vulnerability%22".replace(
-                " ", "+"
-            ).replace('"', "%22"),
+            google_dork_link=f"https://www.google.com/search?q={quote_plus(google_dork_query)}",
             trac_link=f"https://plugins.trac.wordpress.org/log/{slug}/",
         )
 
@@ -288,13 +297,26 @@ class PluginScanner:
                     executor.shutdown(wait=False, cancel_futures=True)
                     break
 
+        self._apply_relative_risk_labels()
         return self.results
+
+    def _apply_relative_risk_labels(self) -> None:
+        """Apply relative risk labels (percentile-based) on top of absolute critical rule."""
+        apply_relative_risk_labels(
+            self.results,
+            get_score=lambda item: item.score,
+            set_label=lambda item, label: setattr(item, "relative_risk", label),
+        )
 
     def get_summary(self) -> Dict[str, Any]:
         """Get scan summary statistics."""
+        # Ensure labels exist even when summary is requested independently.
+        self._apply_relative_risk_labels()
+
         return {
             "total_found": len(self.results),
-            "high_risk": sum(1 for r in self.results if r.score >= 50),
+            "high_risk": sum(1 for r in self.results if r.relative_risk in {"HIGH", "CRITICAL"}),
+            "medium_risk": sum(1 for r in self.results if r.relative_risk == "MEDIUM"),
             "abandoned": sum(1 for r in self.results if r.days_since_update > 730),
             "user_facing": sum(1 for r in self.results if r.is_user_facing),
             "risky_categories": sum(1 for r in self.results if r.is_risky_category),

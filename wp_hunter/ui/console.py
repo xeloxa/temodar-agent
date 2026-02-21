@@ -8,7 +8,7 @@ from typing import Dict, Any
 
 from wp_hunter.config import Colors, CURRENT_WP_VERSION
 from wp_hunter.models import PluginResult
-from wp_hunter.analyzers.vps_scorer import get_score_display
+from wp_hunter.analyzers.vps_scorer import get_score_display, get_score_level
 
 
 def print_banner() -> None:
@@ -47,13 +47,17 @@ def display_plugin_console(idx: int, result: PluginResult) -> None:
         compat_display = f"{Colors.YELLOW}Unknown{Colors.RESET}"
 
     score_display = get_score_display(r.score)
+    relative_label = r.relative_risk or get_score_level(r.score)
 
     print(
         f"{Colors.BOLD}{Colors.CYAN}┌── [{idx}] {r.name} {Colors.RESET}(v{r.version})"
     )
 
     print(
-        f"{Colors.CYAN}│{Colors.RESET}   {Colors.BOLD}SCORE:{Colors.RESET} {score_display}  |  {Colors.BOLD}Compatibility:{Colors.RESET} {compat_display}"
+        f"{Colors.CYAN}│{Colors.RESET}   {Colors.BOLD}SCORE:{Colors.RESET} {score_display}  |  {Colors.BOLD}Relative Risk:{Colors.RESET} {relative_label}"
+    )
+    print(
+        f"{Colors.CYAN}│{Colors.RESET}   {Colors.BOLD}Compatibility:{Colors.RESET} {compat_display}"
     )
     print(
         f"{Colors.CYAN}│{Colors.RESET}   {Colors.BOLD}Data:{Colors.RESET} {r.installations}+ Installations | {r.days_since_update} days ago"
@@ -196,7 +200,7 @@ def print_summary(summary: Dict[str, Any]) -> None:
     """Print scan summary statistics."""
     print(f"\n{Colors.BOLD}{Colors.CYAN}=== Scan Summary ==={Colors.RESET}")
 
-    if "high_risk" in summary:
+    if "high_risk" in summary and summary.get("high_risk", 0) > 0:
         print(
             f"High Risk Targets: {Colors.RED}{summary.get('high_risk', 0)}{Colors.RESET}"
         )

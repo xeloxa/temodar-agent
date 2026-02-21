@@ -6,6 +6,7 @@ Theme fetching and analysis from WordPress.org API.
 
 import time
 from typing import List, Dict, Any, Optional, Callable
+from urllib.parse import quote_plus
 
 from wp_hunter.config import Colors, RISKY_TAGS
 from wp_hunter.infrastructure.http_client import get_session
@@ -95,8 +96,17 @@ class ThemeScanner:
         if downloads < 1000:
             risk_score += 10
 
+        # Align thresholds with plugin-facing UI semantics.
         risk_level = (
-            "HIGH" if risk_score >= 50 else ("MEDIUM" if risk_score >= 30 else "LOW")
+            "HIGH" if risk_score >= 40 else ("MEDIUM" if risk_score >= 20 else "LOW")
+        )
+
+        google_dork_query = (
+            f"\"{slug}\" "
+            f"intext:\"{slug}\" "
+            f"(\"wordpress theme\" OR \"wp theme\" OR \"wordpress.org/themes/{slug}\") "
+            f"(vulnerability OR exploit OR cve) "
+            f"-\"wordpress plugin\" -\"plugins/\""
         )
 
         return {
@@ -116,9 +126,7 @@ class ThemeScanner:
             "patchstack_link": f"https://patchstack.com/database?search={slug}",
             "wordfence_link": f"https://www.wordfence.com/threat-intel/vulnerabilities/search?search={slug}",
             "cve_search_link": f"https://cve.mitre.org/cgi-bin/cvekey.cgi?keyword={slug}",
-            "google_dork_link": f"https://www.google.com/search?q={slug}+theme+site:wpscan.com+OR+site:patchstack.com+OR+site:cve.mitre.org+%22vulnerability%22".replace(
-                " ", "+"
-            ),
+            "google_dork_link": f"https://www.google.com/search?q={quote_plus(google_dork_query)}",
             "screenshot_url": theme.get("screenshot_url", ""),
         }
 

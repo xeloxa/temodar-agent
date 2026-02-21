@@ -17,6 +17,7 @@ from wp_hunter.models import ScanConfig, ScanStatus, PluginResult
 from wp_hunter.database.repository import ScanRepository
 from wp_hunter.scanners.plugin_scanner import PluginScanner
 from wp_hunter.scanners.theme_scanner import ThemeScanner
+from wp_hunter.analyzers.risk_labeler import apply_relative_risk_labels
 from wp_hunter.server.schemas import ScanRequest
 from wp_hunter.server.websockets import manager
 from wp_hunter.server.limiter import limiter
@@ -26,6 +27,15 @@ repo = ScanRepository()
 
 # Track active scans
 active_scans: Dict[int, Any] = {}
+
+
+def _apply_relative_risk_labels_to_dict_results(results: List[Dict[str, Any]]) -> None:
+    """Apply percentile-based relative risk labels to API result dictionaries."""
+    apply_relative_risk_labels(
+        results,
+        get_score=lambda item: int(item.get("score", 0) or 0),
+        set_label=lambda item, label: item.__setitem__("relative_risk", label),
+    )
 
 
 async def run_scan_task(session_id: int, config: ScanConfig, repo: ScanRepository):
@@ -56,6 +66,7 @@ async def run_scan_task(session_id: int, config: ScanConfig, repo: ScanRepositor
                     name=result.get("name", "Unknown"),
                     version=result.get("version", "?"),
                     score=result.get("risk_score", 0),
+                    relative_risk=result.get("risk_level", ""),
                     installations=result.get("downloads", 0),
                     days_since_update=result.get("days_since_update", 0),
                     is_theme=True,
@@ -98,7 +109,7 @@ async def run_scan_task(session_id: int, config: ScanConfig, repo: ScanRepositor
             def sync_on_result(result: PluginResult):
                 nonlocal found_count, high_risk_count
                 found_count += 1
-                if result.score >= 50:
+                if (getattr(result, 'relative_risk', '') in {'HIGH', 'CRITICAL'}) or result.score >= 65:
                     high_risk_count += 1
                 repo.save_result(session_id, result)
                 # Schedule WebSocket send
@@ -133,6 +144,13 @@ async def run_scan_task(session_id: int, config: ScanConfig, repo: ScanRepositor
 
             # Run in thread
             await loop.run_in_executor(None, scanner.scan)
+
+            # Final risk count based on calibrated relative labels.
+            high_risk_count = sum(
+                1
+                for r in scanner.results
+                if getattr(r, "relative_risk", "") in {"HIGH", "CRITICAL"}
+            )
 
         # Update final status
         repo.update_session_status(
@@ -258,6 +276,9 @@ async def get_scan_results(
         raise HTTPException(status_code=404, detail="Scan session not found")
 
     results = repo.get_session_results(session_id, sort_by, sort_order, limit)
+
+    # Add relative risk labels (percentile-based + absolute critical).
+    _apply_relative_risk_labels_to_dict_results(results)
 
     # Add Semgrep status
     slugs = [r["slug"] for r in results]

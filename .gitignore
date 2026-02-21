@@ -188,3 +188,14 @@ Plugins/
 wphunter.db
 .DS_Store
 semgrep_results/
+
+# Local automation runtime artifacts
+labels/
+sessions/
+statuses/
+events.jsonl
+views.json
+
+# Root-local scratch files
+/config.json
+/package-lock.json

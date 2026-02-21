@@ -14,7 +14,7 @@ async def download_plugin(request: DownloadRequest):
     """Download a plugin."""
     downloader = PluginDownloader()
     result = downloader.download_and_extract(
-        request.download_url, request.slug, verbose=False
+        str(request.download_url), request.slug, verbose=False
     )
 
     if result:

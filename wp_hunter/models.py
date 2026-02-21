@@ -160,6 +160,7 @@ class PluginResult:
 
     # Scores & metrics
     score: int = 0
+    relative_risk: str = ""
     installations: int = 0
     days_since_update: int = 0
     tested_wp_version: str = "?"
@@ -194,6 +195,7 @@ class PluginResult:
             "slug": self.slug,
             "version": self.version,
             "score": self.score,
+            "relative_risk": self.relative_risk,
             "installations": self.installations,
             "days_since_update": self.days_since_update,
             "tested_wp_version": self.tested_wp_version,

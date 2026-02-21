@@ -17,8 +17,10 @@ from slowapi.errors import RateLimitExceeded
 from starlette.responses import PlainTextResponse
 
 from wp_hunter.server.websockets import manager
-from wp_hunter.server.routers import scans, semgrep, plugins, favorites, config
+from wp_hunter.server import update_manager
+from wp_hunter.server.routers import scans, semgrep, plugins, favorites, config, system
 from wp_hunter.server.limiter import limiter
+from wp_hunter import __version__
 
 
 def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
@@ -55,9 +57,10 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="WP-Hunter Dashboard",
         description="WordPress Plugin & Theme Security Scanner",
-        version="2.0.0",
+        version=__version__,
     )
-    
+    app.state.update_manager = update_manager.manager
+
     # Security: Add rate limiting
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
@@ -74,6 +77,7 @@ def create_app() -> FastAPI:
     app.include_router(plugins.router)
     app.include_router(favorites.router)
     app.include_router(config.router)
+    app.include_router(system.router)
 
     # Static files directory
     static_dir = Path(__file__).parent / "static"

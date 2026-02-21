@@ -4,6 +4,12 @@ let socket = null;
 let detailsPollingInterval = null; // Polling interval for scan details
 window.currentScanResults = []; // Store results for modal access
 window.favoriteSlugs = new Set(); // Fast lookup for favorite state
+const SYSTEM_STATUS_POLL_INTERVAL = 15000;
+let systemStatusTimer = null;
+window.systemStatus = null;
+let lastSystemErrorMessage = "";
+let lastSystemUpdateMessage = "";
+let announcedUpdateVersion = "";
 
 // Prevent stale API responses that force manual F5
 const _nativeFetch = window.fetch.bind(window);
@@ -170,6 +176,214 @@ function escapeHtml(text) {
         .replace(/'/g, "&#039;");
 }
 
+function formatBytes(bytes) {
+    const size = Number(bytes);
+    if (Number.isNaN(size)) return "";
+    const units = ["B", "KB", "MB", "GB"];
+    let value = size;
+    let index = 0;
+    while (value >= 1024 && index < units.length - 1) {
+        value /= 1024;
+        index += 1;
+    }
+    return `${value.toFixed(index ? 1 : 0)} ${units[index]}`;
+}
+
+function truncateText(text, length = 160) {
+    if (!text) return "";
+    const clean = text.replace(/\s+/g, " ").trim();
+    if (clean.length <= length) return clean;
+    return `${clean.slice(0, length).trim()}…`;
+}
+
+function normalizeVersionTag(tag) {
+    const value = String(tag || "").trim();
+    if (!value) return "";
+    return value.replace(/^v+/i, "");
+}
+
+function formatVersionLabel(tag) {
+    const normalized = normalizeVersionTag(tag);
+    return normalized ? `v${normalized}` : "";
+}
+
+function renderServerUpdateAlert(data) {
+    const updateBadge = document.getElementById("server-update-badge");
+    if (!updateBadge || !data) return;
+
+    const hasLatestVersion = !!(data.latest_version && String(data.latest_version).trim());
+
+    if (data.in_progress) {
+        updateBadge.hidden = false;
+        updateBadge.disabled = true;
+        updateBadge.classList.add("updating");
+        updateBadge.textContent = "UPDATING…";
+        return;
+    }
+
+    updateBadge.classList.remove("updating");
+    updateBadge.disabled = false;
+
+    if (data.update_available && hasLatestVersion) {
+        const latestVersion = formatVersionLabel(data.latest_version) || "NEW";
+        updateBadge.hidden = false;
+        updateBadge.textContent = `UPDATE AVAILABLE (${latestVersion})`;
+
+        if (data.latest_version && announcedUpdateVersion !== data.latest_version) {
+            announcedUpdateVersion = data.latest_version;
+            showToast(
+                `New release detected (${latestVersion}). Click UPDATE AVAILABLE to install it.`,
+                "warn"
+            );
+        }
+    } else {
+        updateBadge.hidden = true;
+        announcedUpdateVersion = "";
+    }
+}
+
+async function loadSystemStatus(force = false) {
+    try {
+        const url = `/api/system/update${force ? "?force=true" : ""}`;
+        const resp = await fetch(url);
+        if (!resp.ok) {
+            throw new Error("Release check failed");
+        }
+        const data = await resp.json();
+        window.systemStatus = data;
+        renderSystemStatus(data);
+    } catch (err) {
+        console.error("System status refresh failed:", err);
+        window.systemStatus = window.systemStatus || null;
+    }
+}
+
+function renderSystemStatus(data) {
+    if (!data) return;
+
+    const versionEl = document.getElementById("app-version");
+    if (versionEl && data.current_version) {
+        versionEl.textContent = `v${data.current_version}`;
+    }
+    renderServerUpdateAlert(data);
+
+    const updateCallout = document.getElementById("update-callout");
+    const updateButton = document.getElementById("update-action-btn");
+    const updateDescription = document.getElementById("update-description");
+    const updateVersion = document.getElementById("update-latest-version");
+    const releaseLink = document.getElementById("update-release-link");
+    const updateTime = document.getElementById("update-checked-time");
+    const assetPreview = document.getElementById("update-asset-preview");
+    const updateProgress = document.getElementById("update-progress");
+    const updateProgressText = document.getElementById("update-progress-text");
+
+    const hasLatestVersion = !!(data.latest_version && String(data.latest_version).trim());
+    if (data.update_available && hasLatestVersion) {
+        if (updateCallout) updateCallout.hidden = false;
+        if (updateVersion) {
+            updateVersion.textContent = formatVersionLabel(data.latest_version) || "New release";
+        }
+        if (updateDescription) {
+            updateDescription.textContent =
+                truncateText(data.release_notes) ||
+                "Release notes are not available yet.";
+        }
+        if (releaseLink) {
+            releaseLink.href = data.release_url || "#";
+        }
+        if (updateTime) {
+            updateTime.textContent = data.checked_at
+                ? `Checked ${new Date(data.checked_at).toLocaleString()}`
+                : "";
+        }
+        if (assetPreview) {
+            const assetName = data.asset_name || data.release_name || "";
+            const assetSize = formatBytes(data.asset_size);
+            assetPreview.textContent = assetName
+                ? `Asset: ${assetName}${assetSize ? ` (${assetSize})` : ""}`
+                : "";
+        }
+        if (updateButton) {
+            updateButton.disabled = !!data.in_progress;
+            updateButton.textContent = data.in_progress
+                ? "INSTALLING…"
+                : "INSTALL UPDATE";
+        }
+    } else if (updateCallout) {
+        updateCallout.hidden = true;
+    }
+
+    if (data.in_progress) {
+        if (updateProgress) updateProgress.hidden = false;
+        if (updateProgressText) {
+            updateProgressText.textContent =
+                data.progress_message || "Downloading update…";
+        }
+    } else if (updateProgress) {
+        updateProgress.hidden = true;
+    }
+
+    if (data.last_error && data.last_error !== lastSystemErrorMessage) {
+        lastSystemErrorMessage = data.last_error;
+        showToast(`Update check failed: ${data.last_error}`, "warn");
+    }
+
+    if (
+        data.last_update_message &&
+        data.last_update_message !== lastSystemUpdateMessage
+    ) {
+        lastSystemUpdateMessage = data.last_update_message;
+        showToast(data.last_update_message, "success");
+    }
+}
+
+function startSystemStatusPolling() {
+    if (systemStatusTimer) {
+        clearInterval(systemStatusTimer);
+    }
+    loadSystemStatus(true);
+    systemStatusTimer = setInterval(() => loadSystemStatus(), SYSTEM_STATUS_POLL_INTERVAL);
+}
+
+async function initiateSystemUpdate() {
+    if (!window.systemStatus || !window.systemStatus.update_available) {
+        showToast("No newer update is available right now.", "info");
+        return;
+    }
+
+    if (window.systemStatus.in_progress) {
+        showToast("An update is already running.", "info");
+        return;
+    }
+
+    const latestVersion = formatVersionLabel(window.systemStatus.latest_version) || "the latest release";
+    const confirmMessage = `${latestVersion} will be downloaded from GitHub Releases and installed automatically. Do you want to continue?`;
+    const userConfirmed = await window.showConfirm(confirmMessage);
+    if (!userConfirmed) return;
+
+    try {
+        const resp = await fetch("/api/system/update", {
+            method: "POST",
+        });
+        if (!resp.ok) {
+            const errorText = await resp.text();
+            throw new Error(errorText || "Update request failed.");
+        }
+        const payload = await resp.json();
+        showToast(
+            payload.message || "Update started. Download and installation are running in the background.",
+            "success"
+        );
+        loadSystemStatus(true);
+    } catch (err) {
+        console.error("Failed to trigger update:", err);
+        showToast(
+            `Failed to start update: ${err.message || "unknown error"}`,
+            "error"
+        );
+    }
+}
+
 async function refreshFavoriteSlugs() {
     try {
         const resp = await fetch('/api/favorites');
@@ -187,51 +401,6 @@ function isFavoriteSlug(slug) {
 
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Server Address Badge - Update immediately
-    const addressBadge = document.getElementById('server-address');
-    if (addressBadge) {
-        const host = window.location.host;
-        addressBadge.textContent = host;
-        
-        addressBadge.addEventListener('click', () => {
-            if (navigator.clipboard) {
-                navigator.clipboard.writeText(host).then(() => {
-                    const original = addressBadge.textContent;
-                    addressBadge.textContent = 'COPIED!';
-                    addressBadge.style.color = '#00FF9D';
-                    addressBadge.style.borderColor = '#00FF9D';
-                    
-                    setTimeout(() => {
-                        addressBadge.textContent = original;
-                        addressBadge.style.color = '';
-                        addressBadge.style.borderColor = '';
-                    }, 2000);
-                }).catch(err => {
-                    console.error('Copy failed:', err);
-                });
-            } else {
-                // Fallback for non-secure contexts
-                const textArea = document.createElement("textarea");
-                textArea.value = host;
-                document.body.appendChild(textArea);
-                textArea.select();
-                try {
-                    document.execCommand('copy');
-                    const original = addressBadge.textContent;
-                    addressBadge.textContent = 'COPIED!';
-                    addressBadge.style.color = '#00FF9D';
-                    setTimeout(() => {
-                        addressBadge.textContent = original;
-                        addressBadge.style.color = '';
-                    }, 2000);
-                } catch (err) {
-                    console.error('Fallback copy failed', err);
-                }
-                document.body.removeChild(textArea);
-            }
-        });
-    }
-
     // Initial setup
     // Form listeners removed - updateCommand was empty
     const form = document.getElementById('configForm');
@@ -252,6 +421,16 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Listen for hash changes (browser back/forward)
     window.addEventListener('hashchange', restoreViewFromHash);
+    
+    const updateButton = document.getElementById('update-action-btn');
+    if (updateButton) {
+        updateButton.addEventListener('click', initiateSystemUpdate);
+    }
+    const serverUpdateButton = document.getElementById('server-update-badge');
+    if (serverUpdateButton) {
+        serverUpdateButton.addEventListener('click', initiateSystemUpdate);
+    }
+    startSystemStatusPolling();
 });
 
 // Restore view from URL hash

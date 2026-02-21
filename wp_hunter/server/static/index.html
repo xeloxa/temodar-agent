@@ -68,6 +68,127 @@
         .status-badge.running { background: rgba(0, 243, 255, 0.1); color: var(--accent-blue); }
         .status-badge.failed { background: rgba(255, 0, 85, 0.1); color: var(--accent-secondary); }
         
+        .system-meta {
+            margin-top: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+        }
+        .version-line {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 8px;
+            color: var(--text-muted);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+        .version-line .version-label {
+            opacity: 0.7;
+        }
+        .version-line .version-value {
+            font-weight: 700;
+            color: var(--accent-primary);
+        }
+        .update-callout {
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 10px 14px;
+            background: rgba(255, 255, 255, 0.02);
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: flex-start;
+        }
+        .update-content {
+            flex: 1;
+        }
+        .update-headline {
+            font-size: 12px;
+            color: var(--text-main);
+            margin-bottom: 4px;
+            font-weight: 600;
+        }
+        .update-description {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin: 0;
+            line-height: 1.3;
+            max-height: 38px;
+            overflow: hidden;
+        }
+        .update-meta {
+            margin-top: 6px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            font-size: 10px;
+            color: #7d7d7d;
+        }
+        .update-link {
+            color: var(--accent-blue);
+            text-decoration: none;
+        }
+        .update-link:hover {
+            text-decoration: underline;
+        }
+        .update-action-btn {
+            min-width: 120px;
+            padding: 6px 16px;
+            font-size: 11px;
+            border-radius: 4px;
+        }
+        .update-action-btn[disabled] {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .update-progress {
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 6px 14px;
+            background: rgba(0, 255, 157, 0.05);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 11px;
+            color: var(--accent-primary);
+        }
+        .update-callout[hidden],
+        .update-progress[hidden],
+        .server-update-badge[hidden] {
+            display: none !important;
+        }
+        .server-update-badge {
+            margin-top: 6px;
+            background: rgba(255, 189, 46, 0.14);
+            color: #ffbd2e;
+            border: 1px solid rgba(255, 189, 46, 0.35);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .server-update-badge:hover {
+            border-color: rgba(255, 189, 46, 0.65);
+            background: rgba(255, 189, 46, 0.2);
+            box-shadow: 0 0 10px rgba(255, 189, 46, 0.15);
+        }
+        .server-update-badge.updating {
+            background: rgba(0, 243, 255, 0.14);
+            color: var(--accent-blue);
+            border-color: rgba(0, 243, 255, 0.35);
+            cursor: progress;
+        }
+        .update-spinner {
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(0, 255, 157, 0.5);
+            border-top-color: var(--accent-primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
         .panel-actions {
             margin-left: auto;
             display: flex;
@@ -263,14 +384,38 @@
     <div class="layout">
         <!-- Sidebar / Header -->
         <header class="sidebar">
-            <div class="brand">
-                <div class="logo-mark" style="width: 100%; display: flex; justify-content: flex-start; margin-bottom: 10px;">
-                    <img src="assets/banner.png" alt="WP-Hunter" style="width: 160px; height: auto; object-fit: contain;">
+                <div class="brand">
+                    <div class="logo-mark" style="width: 100%; display: flex; justify-content: flex-start; margin-bottom: 10px;">
+                        <img src="assets/banner.png" alt="WP-Hunter" style="width: 160px; height: auto; object-fit: contain;">
+                    </div>
+                    <button id="server-update-badge" class="badge server-update-badge" type="button" hidden>UPDATE AVAILABLE</button>
+                    <div class="system-meta">
+                        <div class="version-line">
+                            <span class="version-label">App version</span>
+                            <span class="version-value" id="app-version">—</span>
+                        </div>
+                        <div id="update-callout" class="update-callout" hidden>
+                            <div class="update-content">
+                                <div class="update-headline">
+                                    New release <span id="update-latest-version">—</span>
+                                </div>
+                                <p id="update-description" class="update-description">Update metadata is loading…</p>
+                                <div class="update-meta">
+                                    <span id="update-asset-preview"></span>
+                                    <span id="update-checked-time"></span>
+                                    <a id="update-release-link" class="update-link" href="#" target="_blank" rel="noreferrer noopener">View release</a>
+                                </div>
+                            </div>
+                            <button id="update-action-btn" class="action-btn update-action-btn" type="button">INSTALL UPDATE</button>
+                        </div>
+                        <div id="update-progress" class="update-progress" hidden>
+                            <span class="update-spinner" aria-hidden="true"></span>
+                            <span id="update-progress-text">Preparing update…</span>
+                        </div>
+                    </div>
                 </div>
-                <div class="badge" id="server-address" style="margin-top: 10px; cursor: pointer;" title="Click to copy address">...</div>
-            </div>
             
-            <p class="mission-brief">
+                <p class="mission-brief">
                 Advanced WordPress reconnaissance and static analysis tool. 
                 Configure your scan parameters below to generate the execution sequence.
             </p>
@@ -840,6 +985,6 @@
         </div>
     </div>
 
-    <script src="assets/js/app.js?v=6"></script>
+    <script src="assets/js/app.js?v=9"></script>
 </body>
 </html>

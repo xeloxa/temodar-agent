@@ -9,6 +9,10 @@
 </p>
 
 <p align="center">
+  <a href="https://www.producthunt.com/products/wp-hunter?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-wp-hunter" target="_blank" rel="noopener noreferrer"><img alt="WP-Hunter - WP plugin recon & SAST tool for security researchers. | Product Hunt" width="220" height="48" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1084875&theme=light&t=1771939449742"></a>
+</p>
+
+<p align="center">
   <b>🌐 Dil Seçimi:</b><br>
   <a href="README.md"><img src="https://img.shields.io/badge/🇬🇧-English-blue" alt="English"></a>
   <a href="README.tr.md"><img src="https://img.shields.io/badge/🇹🇷-Türkçe-red" alt="Türkçe"></a>

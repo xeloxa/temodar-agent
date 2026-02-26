@@ -3,9 +3,6 @@
 <div align="center">
   <img src="assets/banner.png" alt="WP-Hunter Banner" width="600"/>
 </div>
-<p align="center">
-  <img src="https://img.shields.io/badge/🤖_AI_SECURITY_ENGINE-COMING_SOON-ff0000?style=for-the-badge" />
-</p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.8%2B-blue?logo=python&logoColor=white" alt="Python 3.8+">

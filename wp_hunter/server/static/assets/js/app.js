@@ -6,11 +6,86 @@ let modalReturnHash = 'history';
 window.currentScanResults = []; // Store results for modal access
 window.favoriteSlugs = new Set(); // Fast lookup for favorite state
 const SYSTEM_STATUS_POLL_INTERVAL = 15000;
+const SIDEBAR_PREF_KEY = 'wp-hunter-sidebar-collapsed';
+const STAR_STRIP_PREF_KEY = 'wp-hunter-star-strip-hidden';
 let systemStatusTimer = null;
 window.systemStatus = null;
 let lastSystemErrorMessage = "";
 let lastSystemUpdateMessage = "";
 let announcedUpdateVersion = "";
+
+function applySidebarState(collapsed) {
+    const layout = document.querySelector('.layout');
+    const toggleBtn = document.getElementById('sidebar-toggle');
+    const isMobile = window.matchMedia('(max-width: 800px)').matches;
+
+    if (!layout || !toggleBtn) return;
+
+    if (isMobile) {
+        layout.classList.remove('sidebar-collapsed');
+        toggleBtn.setAttribute('aria-expanded', 'true');
+        toggleBtn.setAttribute('aria-label', 'Collapse sidebar');
+        toggleBtn.title = 'Collapse sidebar';
+        return;
+    }
+
+    layout.classList.toggle('sidebar-collapsed', collapsed);
+    toggleBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    toggleBtn.setAttribute('aria-label', collapsed ? 'Expand sidebar' : 'Collapse sidebar');
+    toggleBtn.title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
+}
+
+window.toggleSidebarCollapse = function() {
+    const layout = document.querySelector('.layout');
+    if (!layout) return;
+
+    const isMobile = window.matchMedia('(max-width: 800px)').matches;
+    if (isMobile) {
+        applySidebarState(false);
+        localStorage.setItem(SIDEBAR_PREF_KEY, '0');
+        return;
+    }
+
+    const willCollapse = !layout.classList.contains('sidebar-collapsed');
+    applySidebarState(willCollapse);
+    localStorage.setItem(SIDEBAR_PREF_KEY, willCollapse ? '1' : '0');
+};
+
+function initializeSidebarToggle() {
+    const toggleBtn = document.getElementById('sidebar-toggle');
+    if (!toggleBtn) return;
+
+    toggleBtn.addEventListener('click', window.toggleSidebarCollapse);
+
+    const savedCollapsed = localStorage.getItem(SIDEBAR_PREF_KEY) === '1';
+    applySidebarState(savedCollapsed);
+
+    window.addEventListener('resize', () => {
+        const shouldCollapse = window.matchMedia('(max-width: 800px)').matches
+            ? false
+            : localStorage.getItem(SIDEBAR_PREF_KEY) === '1';
+        applySidebarState(shouldCollapse);
+    });
+}
+
+function initializeStarStripDismiss() {
+    const starStrip = document.querySelector('.star-strip');
+    const closeBtn = document.getElementById('star-strip-close');
+    if (!starStrip || !closeBtn) return;
+
+    const setStarStripHidden = (hidden) => {
+        starStrip.classList.toggle('is-hidden', hidden);
+        document.body.classList.toggle('star-strip-hidden', hidden);
+    };
+
+    const hidden = localStorage.getItem(STAR_STRIP_PREF_KEY) === '1';
+    setStarStripHidden(hidden);
+
+    closeBtn.addEventListener('click', () => {
+        setStarStripHidden(true);
+        localStorage.setItem(STAR_STRIP_PREF_KEY, '1');
+    });
+}
 
 // Prevent stale API responses that force manual F5
 const _nativeFetch = window.fetch.bind(window);
@@ -177,19 +252,6 @@ function escapeHtml(text) {
         .replace(/'/g, "&#039;");
 }
 
-function formatBytes(bytes) {
-    const size = Number(bytes);
-    if (Number.isNaN(size)) return "";
-    const units = ["B", "KB", "MB", "GB"];
-    let value = size;
-    let index = 0;
-    while (value >= 1024 && index < units.length - 1) {
-        value /= 1024;
-        index += 1;
-    }
-    return `${value.toFixed(index ? 1 : 0)} ${units[index]}`;
-}
-
 function truncateText(text, length = 160) {
     if (!text) return "";
     const clean = text.replace(/\s+/g, " ").trim();
@@ -209,36 +271,29 @@ function formatVersionLabel(tag) {
 }
 
 function renderServerUpdateAlert(data) {
-    const updateBadge = document.getElementById("server-update-badge");
-    if (!updateBadge || !data) return;
+    const sidebar = document.getElementById('sidebar');
+    if (!data) return;
 
     const hasLatestVersion = !!(data.latest_version && String(data.latest_version).trim());
 
     if (data.in_progress) {
-        updateBadge.hidden = false;
-        updateBadge.disabled = true;
-        updateBadge.classList.add("updating");
-        updateBadge.textContent = "UPDATING…";
+        if (sidebar) sidebar.classList.add('has-update');
         return;
     }
 
-    updateBadge.classList.remove("updating");
-    updateBadge.disabled = false;
-
     if (data.update_available && hasLatestVersion) {
+        if (sidebar) sidebar.classList.add('has-update');
         const latestVersion = formatVersionLabel(data.latest_version) || "NEW";
-        updateBadge.hidden = false;
-        updateBadge.textContent = `UPDATE AVAILABLE (${latestVersion})`;
 
         if (data.latest_version && announcedUpdateVersion !== data.latest_version) {
             announcedUpdateVersion = data.latest_version;
             showToast(
-                `New release detected (${latestVersion}). Click UPDATE AVAILABLE to install it.`,
+                `New release detected (${latestVersion}). Open the update card to install it.`,
                 "warn"
             );
         }
     } else {
-        updateBadge.hidden = true;
+        if (sidebar) sidebar.classList.remove('has-update');
         announcedUpdateVersion = "";
     }
 }
@@ -273,8 +328,6 @@ function renderSystemStatus(data) {
     const updateDescription = document.getElementById("update-description");
     const updateVersion = document.getElementById("update-latest-version");
     const releaseLink = document.getElementById("update-release-link");
-    const updateTime = document.getElementById("update-checked-time");
-    const assetPreview = document.getElementById("update-asset-preview");
     const updateProgress = document.getElementById("update-progress");
     const updateProgressText = document.getElementById("update-progress-text");
 
@@ -291,18 +344,6 @@ function renderSystemStatus(data) {
         }
         if (releaseLink) {
             releaseLink.href = data.release_url || "#";
-        }
-        if (updateTime) {
-            updateTime.textContent = data.checked_at
-                ? `Checked ${new Date(data.checked_at).toLocaleString()}`
-                : "";
-        }
-        if (assetPreview) {
-            const assetName = data.asset_name || data.release_name || "";
-            const assetSize = formatBytes(data.asset_size);
-            assetPreview.textContent = assetName
-                ? `Asset: ${assetName}${assetSize ? ` (${assetSize})` : ""}`
-                : "";
         }
         if (updateButton) {
             updateButton.disabled = !!data.in_progress;
@@ -406,6 +447,9 @@ function isFavoriteSlug(slug) {
 
 document.addEventListener('DOMContentLoaded', () => {
     // Initial setup
+    initializeSidebarToggle();
+    initializeStarStripDismiss();
+
     // Load history
     loadHistory();
     
@@ -426,10 +470,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const updateButton = document.getElementById('update-action-btn');
     if (updateButton) {
         updateButton.addEventListener('click', initiateSystemUpdate);
-    }
-    const serverUpdateButton = document.getElementById('server-update-badge');
-    if (serverUpdateButton) {
-        serverUpdateButton.addEventListener('click', initiateSystemUpdate);
     }
     startSystemStatusPolling();
 });

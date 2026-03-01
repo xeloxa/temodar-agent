@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WP-Hunter | Reconnaissance Interface</title>
-    <link rel="icon" type="image/png" href="assets/banner.png">
+    <link rel="icon" type="image/png" href="assets/favicon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -22,8 +22,10 @@
             color: #666;
             display: flex;
             align-items: center;
-            gap: 12px;
-            padding: 10px 15px;
+            justify-content: flex-start;
+            gap: 10px;
+            width: 100%;
+            padding: 10px 12px;
             cursor: pointer;
             font-family: 'JetBrains Mono', monospace;
             font-size: 13px;
@@ -68,81 +70,66 @@
         .status-badge.running { background: rgba(0, 243, 255, 0.1); color: var(--accent-blue); }
         .status-badge.failed { background: rgba(255, 0, 85, 0.1); color: var(--accent-secondary); }
         
-        .system-meta {
-            margin-top: 14px;
+        .update-callout {
+            border: 1px solid rgba(255, 189, 46, 0.35);
+            border-radius: 10px;
+            padding: 10px 12px;
+            background: linear-gradient(180deg, rgba(255, 189, 46, 0.08), rgba(255, 189, 46, 0.03));
             display: flex;
             flex-direction: column;
-            gap: 10px;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 12px;
-        }
-        .version-line {
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
             gap: 8px;
-            color: var(--text-muted);
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.4px;
-        }
-        .version-line .version-label {
-            opacity: 0.7;
-        }
-        .version-line .version-value {
-            font-weight: 700;
-            color: var(--accent-primary);
-        }
-        .update-callout {
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            padding: 10px 14px;
-            background: rgba(255, 255, 255, 0.02);
-            display: flex;
-            justify-content: space-between;
-            gap: 12px;
-            align-items: flex-start;
         }
         .update-content {
             flex: 1;
         }
         .update-headline {
-            font-size: 12px;
-            color: var(--text-main);
-            margin-bottom: 4px;
-            font-weight: 600;
+            font-size: 11px;
+            color: #ffbd2e;
+            margin-bottom: 0;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
         }
         .update-description {
             font-size: 11px;
-            color: var(--text-muted);
+            color: #d6d6d6;
             margin: 0;
             line-height: 1.3;
-            max-height: 38px;
+            max-height: 30px;
             overflow: hidden;
         }
-        .update-meta {
-            margin-top: 6px;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
-            font-size: 10px;
-            color: #7d7d7d;
-        }
         .update-link {
-            color: var(--accent-blue);
+            color: #ffd36b;
             text-decoration: none;
+            font-size: 10px;
+            font-family: var(--font-mono);
+            letter-spacing: 0.03em;
         }
         .update-link:hover {
             text-decoration: underline;
         }
         .update-action-btn {
-            min-width: 120px;
-            padding: 6px 16px;
+            margin-top: 2px;
+            width: 100%;
+            min-height: 30px;
+            border-radius: 8px;
+            border: 1px solid rgba(0, 255, 157, 0.45);
+            background: linear-gradient(180deg, rgba(0, 255, 157, 0.22), rgba(0, 255, 157, 0.12));
+            color: #00ff9d;
+            font-family: var(--font-mono);
             font-size: 11px;
-            border-radius: 4px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .update-action-btn:hover {
+            background: linear-gradient(180deg, rgba(0, 255, 157, 0.32), rgba(0, 255, 157, 0.18));
+            border-color: rgba(0, 255, 157, 0.75);
         }
         .update-action-btn[disabled] {
-            opacity: 0.5;
+            opacity: 0.55;
             cursor: not-allowed;
         }
         .update-progress {
@@ -157,28 +144,8 @@
             color: var(--accent-primary);
         }
         .update-callout[hidden],
-        .update-progress[hidden],
-        .server-update-badge[hidden] {
+        .update-progress[hidden] {
             display: none !important;
-        }
-        .server-update-badge {
-            margin-top: 6px;
-            background: rgba(255, 189, 46, 0.14);
-            color: #ffbd2e;
-            border: 1px solid rgba(255, 189, 46, 0.35);
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .server-update-badge:hover {
-            border-color: rgba(255, 189, 46, 0.65);
-            background: rgba(255, 189, 46, 0.2);
-            box-shadow: 0 0 10px rgba(255, 189, 46, 0.15);
-        }
-        .server-update-badge.updating {
-            background: rgba(0, 243, 255, 0.14);
-            color: var(--accent-blue);
-            border-color: rgba(0, 243, 255, 0.35);
-            cursor: progress;
         }
         .update-spinner {
             width: 14px;
@@ -378,97 +345,79 @@
             <a class="star-strip__action" href="https://github.com/xeloxa/wp-hunter" target="_blank" rel="noreferrer noopener">
                 https://github.com/xeloxa/wp-hunter
             </a>
+            <button id="star-strip-close" class="star-strip__close" type="button" aria-label="Hide this message" title="Hide this message">x</button>
         </div>
     </div>
 
     <div class="layout">
         <!-- Sidebar / Header -->
-        <header class="sidebar">
+        <header class="sidebar" id="sidebar">
+            <div class="sidebar-main">
                 <div class="brand">
-                    <div class="logo-mark" style="width: 100%; display: flex; justify-content: flex-start; margin-bottom: 10px;">
-                        <img src="assets/banner.png" alt="WP-Hunter" style="width: 160px; height: auto; object-fit: contain;">
-                    </div>
-                    <button id="server-update-badge" class="badge server-update-badge" type="button" hidden>UPDATE AVAILABLE</button>
-                    <div class="system-meta">
-                        <div class="version-line">
-                            <span class="version-label">App version</span>
-                            <span class="version-value" id="app-version">—</span>
-                        </div>
-                        <div id="update-callout" class="update-callout" hidden>
-                            <div class="update-content">
-                                <div class="update-headline">
-                                    New release <span id="update-latest-version">—</span>
-                                </div>
-                                <p id="update-description" class="update-description">Update metadata is loading…</p>
-                                <div class="update-meta">
-                                    <span id="update-asset-preview"></span>
-                                    <span id="update-checked-time"></span>
-                                    <a id="update-release-link" class="update-link" href="#" target="_blank" rel="noreferrer noopener">View release</a>
-                                </div>
-                            </div>
-                            <button id="update-action-btn" class="action-btn update-action-btn" type="button">INSTALL UPDATE</button>
-                        </div>
-                        <div id="update-progress" class="update-progress" hidden>
-                            <span class="update-spinner" aria-hidden="true"></span>
-                            <span id="update-progress-text">Preparing update…</span>
-                        </div>
+                    <div class="logo-mark" style="width: 100%; display: flex; justify-content: center; margin-bottom: 8px;">
+                        <img class="logo-full" src="assets/banner.png" alt="WP-Hunter" style="width: 170px; height: auto; object-fit: contain;">
+                        <img class="logo-compact" src="assets/wmark.png" alt="WP-Hunter mark" style="width: 56px; height: auto; object-fit: contain;">
                     </div>
                 </div>
-            
-                <p class="mission-brief">
-                Advanced WordPress reconnaissance and static analysis tool. 
-                Configure your scan parameters below to generate the execution sequence.
-            </p>
 
-            <div class="status-panel">
-                <div class="status-row">
-                    <span class="label">SYSTEM</span>
-                    <span class="value online">ONLINE</span>
-                </div>
-                <div class="status-row">
-                    <span class="label">TARGET</span>
-                    <span class="value">WORDPRESS.ORG</span>
-                </div>
-                <div class="status-row">
-                    <span class="label">MODE</span>
-                    <span class="value mode-display">RECON</span>
+                <!-- Navigation -->
+                <div class="nav-menu">
+                    <button class="nav-item active" id="nav-scan" onclick="switchTab('scan')">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="8" x2="12" y2="16"></line>
+                            <line x1="8" y1="12" x2="16" y2="12"></line>
+                        </svg>
+                        <span class="nav-label">NEW SCAN</span>
+                    </button>
+                    <button class="nav-item" id="nav-history" onclick="switchTab('history')">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
+                        <span class="nav-label">HISTORY</span>
+                    </button>
+                    <button class="nav-item" id="nav-favorites" onclick="switchTab('favorites')">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                        <span class="nav-label">FAVORITES</span>
+                    </button>
+                    <button class="nav-item" id="nav-semgrep" onclick="switchTab('semgrep')">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+                        </svg>
+                        <span class="nav-label">SEMGREP RULES</span>
+                    </button>
                 </div>
             </div>
 
-            <!-- Navigation -->
-            <div class="nav-menu">
-                <button class="nav-item active" id="nav-scan" onclick="switchTab('scan')">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <line x1="12" y1="8" x2="12" y2="16"></line>
-                        <line x1="8" y1="12" x2="16" y2="12"></line>
-                    </svg>
-                    <span>NEW SCAN</span>
-                </button>
-                <button class="nav-item" id="nav-history" onclick="switchTab('history')">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <polyline points="12 6 12 12 16 14"></polyline>
-                    </svg>
-                    <span>HISTORY</span>
-                </button>
-                <button class="nav-item" id="nav-favorites" onclick="switchTab('favorites')">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
-                    <span>FAVORITES</span>
-                </button>
-                <button class="nav-item" id="nav-semgrep" onclick="switchTab('semgrep')">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
-                    </svg>
-                    <span>SEMGREP RULES</span>
-                </button>
-            </div>
+            <div class="sidebar-footer">
+                <div id="update-callout" class="update-callout" hidden>
+                    <div class="update-content">
+                        <div class="update-headline">
+                            New release <span id="update-latest-version">—</span>
+                        </div>
+                        <p id="update-description" class="update-description">Update metadata is loading…</p>
+                        <a id="update-release-link" class="update-link" href="#" target="_blank" rel="noreferrer noopener">View release notes</a>
+                    </div>
+                    <button id="update-action-btn" class="update-action-btn" type="button">INSTALL UPDATE</button>
+                </div>
+                <div id="update-progress" class="update-progress" hidden>
+                    <span class="update-spinner" aria-hidden="true"></span>
+                    <span id="update-progress-text">Preparing update…</span>
+                </div>
 
-            <div class="links">
-                <a href="https://github.com/xeloxa/wp-hunter" target="_blank" class="link-item">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-                    Repository
-                </a>
+                <div class="sidebar-meta-row">
+                    <a href="https://github.com/xeloxa/wp-hunter" target="_blank" rel="noreferrer noopener" class="sidebar-icon-btn sidebar-github" aria-label="Open WP-Hunter GitHub repository" title="Open GitHub repository">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                    </a>
+                    <span class="version-chip" id="app-version">—</span>
+                    <button id="sidebar-toggle" class="sidebar-icon-btn sidebar-toggle" type="button" aria-label="Collapse sidebar" aria-expanded="true" title="Collapse sidebar">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <polyline points="15 18 9 12 15 6"></polyline>
+                        </svg>
+                        <span class="update-dot" aria-hidden="true"></span>
+                    </button>
+                </div>
             </div>
         </header>
 

@@ -17,8 +17,8 @@ limits>=3.7.0
 # Database
 # SQLite is built-in
 
-# Security Analysis (Optional)
-# semgrep  # Install separately: pip install semgrep
+# Security Analysis
+semgrep>=1.74.0; python_version >= "3.10"
 
 # Configuration
 pyyaml>=6.0.1

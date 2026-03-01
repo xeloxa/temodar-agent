@@ -8,8 +8,6 @@ from fastapi import (
     APIRouter,
     HTTPException,
     BackgroundTasks,
-    WebSocket,
-    WebSocketDisconnect,
     Request,
 )
 
@@ -109,7 +107,9 @@ async def run_scan_task(session_id: int, config: ScanConfig, repo: ScanRepositor
             def sync_on_result(result: PluginResult):
                 nonlocal found_count, high_risk_count
                 found_count += 1
-                if (getattr(result, 'relative_risk', '') in {'HIGH', 'CRITICAL'}) or result.score >= 65:
+                if (
+                    getattr(result, "relative_risk", "") in {"HIGH", "CRITICAL"}
+                ) or result.score >= 65:
                     high_risk_count += 1
                 repo.save_result(session_id, result)
                 # Schedule WebSocket send
@@ -212,7 +212,9 @@ async def list_scans(request: Request, limit: int = 50):
 
 @router.post("")
 @limiter.limit("5/minute")
-async def create_scan(request: Request, scan_request: ScanRequest, background_tasks: BackgroundTasks):
+async def create_scan(
+    request: Request, scan_request: ScanRequest, background_tasks: BackgroundTasks
+):
     """Create and start a new scan."""
     # Abandoned mode: override sort to "popular" for effective scanning
     sort = scan_request.sort

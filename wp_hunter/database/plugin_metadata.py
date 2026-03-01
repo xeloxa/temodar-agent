@@ -239,31 +239,6 @@ class PluginMetadataRepository:
                 success_count += 1
         return success_count
 
-    def get_plugin(
-        self, slug: str, version: Optional[str] = None
-    ) -> Optional[Dict[str, Any]]:
-        with get_metadata_db(self.db_path) as conn:
-            cursor = conn.cursor()
-
-            if version:
-                cursor.execute(
-                    """
-                    SELECT * FROM plugins WHERE slug = ? AND version = ?
-                """,
-                    (slug, version),
-                )
-            else:
-                cursor.execute(
-                    """
-                    SELECT * FROM plugins WHERE slug = ? 
-                    ORDER BY fetched_at DESC LIMIT 1
-                """,
-                    (slug,),
-                )
-
-            row = cursor.fetchone()
-            return self._row_to_dict(row) if row else None
-
     def query_plugins(
         self,
         min_installs: int = 0,
@@ -407,24 +382,6 @@ class PluginMetadataRepository:
                 "popular_10k": popular,
                 "popular_100k": very_popular,
             }
-
-    def get_slugs_for_download(
-        self, min_installs: int = 0, limit: int = 100
-    ) -> List[str]:
-        with get_metadata_db(self.db_path) as conn:
-            cursor = conn.cursor()
-
-            cursor.execute(
-                """
-                SELECT DISTINCT slug FROM plugins 
-                WHERE active_installs >= ?
-                ORDER BY active_installs DESC
-                LIMIT ?
-            """,
-                (min_installs, limit),
-            )
-
-            return [row[0] for row in cursor.fetchall()]
 
     def _row_to_dict(self, row: sqlite3.Row) -> Dict[str, Any]:
         if not row:

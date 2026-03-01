@@ -9,7 +9,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from urllib.parse import urlparse
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
@@ -23,11 +23,10 @@ from wp_hunter.server.limiter import limiter
 from wp_hunter import __version__
 
 
-def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
+def rate_limit_exceeded_handler(request: Request, exc: Exception):
     """Custom rate limit exceeded handler."""
     return PlainTextResponse(
-        "Rate limit exceeded. Please try again later.",
-        status_code=429
+        "Rate limit exceeded. Please try again later.", status_code=429
     )
 
 
@@ -64,12 +63,9 @@ def create_app() -> FastAPI:
     # Security: Add rate limiting
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
-    
+
     # Security: Add trusted host middleware (localhost only)
-    app.add_middleware(
-        TrustedHostMiddleware,
-        allowed_hosts=["localhost", "127.0.0.1"]
-    )
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1"])
 
     try:
         update_manager.manager.get_status(force=False)

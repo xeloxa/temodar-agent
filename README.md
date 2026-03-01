@@ -108,7 +108,7 @@ WP-Hunter now features a powerful local dashboard for visual researchers.
 ### Prerequisites
 - Python 3.8 or higher
 - pip (Python package installer)
-- [Semgrep](https://semgrep.dev/docs/getting-started/) (Optional, for deep analysis)
+- Semgrep is installed automatically with `pip install -r requirements.txt` on Python 3.10+
 
 ### Setup
 1. Clone the repository:
@@ -199,6 +199,12 @@ The score (0-100) reflects the likelihood of **unpatched** or **unknown** vulner
 ## ⚖️ Legal Disclaimer
 
 This tool is designed for **security research and authorized reconnaissance** purposes only. It is intended to assist security professionals and developers in assessing attack surfaces and evaluating plugin health. The authors are not responsible for any misuse. Always ensure you have appropriate authorization before performing any security-related activities.
+
+## 📄 Licensing Notes
+
+- WP-Hunter is licensed under MIT (`LICENSE`).
+- Semgrep is used as a third-party scanner and keeps its own `LGPL-2.1` license.
+- See `THIRD_PARTY_LICENSES.md` for details.
 
 ---
 

@@ -5,7 +5,7 @@ Database Controller for WP-Hunter
 import json
 import csv
 from pathlib import Path
-from typing import Optional, List, Any
+from typing import Optional
 
 from wp_hunter.config import Colors
 from wp_hunter.database.plugin_metadata import PluginMetadataRepository
@@ -52,34 +52,39 @@ def query_database(
     semgrep_output: str = "./semgrep_results",
 ) -> None:
     """Query plugins from local database with advanced filters."""
-    
+
     # Security: Validate and sanitize export_path
     safe_export_path = None
     if export_path:
-        from pathlib import Path
         import re
-        
+
         # Prevent path traversal - only allow simple filenames
         export_path_obj = Path(export_path)
-        
+
         # Reject paths with parent directory references
         if ".." in export_path or "~" in export_path:
-            print(f"{Colors.RED}[!] Invalid export path: Path traversal detected{Colors.RESET}")
+            print(
+                f"{Colors.RED}[!] Invalid export path: Path traversal detected{Colors.RESET}"
+            )
             return
-        
+
         # Reject absolute paths
         if export_path_obj.is_absolute():
-            print(f"{Colors.RED}[!] Invalid export path: Absolute paths not allowed{Colors.RESET}")
+            print(
+                f"{Colors.RED}[!] Invalid export path: Absolute paths not allowed{Colors.RESET}"
+            )
             return
-        
+
         # Only allow alphanumeric, hyphens, underscores, dots for filename
         filename = export_path_obj.name
-        if not re.match(r'^[a-zA-Z0-9_.-]+$', filename):
-            print(f"{Colors.RED}[!] Invalid export path: Invalid characters in filename{Colors.RESET}")
+        if not re.match(r"^[a-zA-Z0-9_.-]+$", filename):
+            print(
+                f"{Colors.RED}[!] Invalid export path: Invalid characters in filename{Colors.RESET}"
+            )
             return
-        
+
         safe_export_path = str(export_path_obj)
-    
+
     repo = PluginMetadataRepository()
 
     # Parse tags if provided

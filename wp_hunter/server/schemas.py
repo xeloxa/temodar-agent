@@ -54,3 +54,7 @@ class SemgrepRuleRequest(BaseModel):
 
 class SemgrepRulesetRequest(BaseModel):
     ruleset: str = Field(..., min_length=1, max_length=200)
+
+
+class SemgrepBulkToggleRequest(BaseModel):
+    enabled: bool

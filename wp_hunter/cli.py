@@ -285,7 +285,7 @@ def run_db_sync(args: argparse.Namespace) -> None:
     )
 
 
-def run_db_stats(args: argparse.Namespace) -> None:
+def run_db_stats() -> None:
     """Show database statistics."""
     display_db_stats()
 
@@ -326,9 +326,7 @@ def run_gui(port: int = 8080) -> None:
         print(
             f"{Colors.RED}[!] GUI mode requires additional dependencies.{Colors.RESET}"
         )
-        print(
-            f"{Colors.YELLOW}Import error: {e}{Colors.RESET}"
-        )
+        print(f"{Colors.YELLOW}Import error: {e}{Colors.RESET}")
         print(
             f"{Colors.YELLOW}Please install: pip install fastapi uvicorn websockets{Colors.RESET}"
         )
@@ -413,7 +411,9 @@ def run_update(update_manager_module) -> None:
         time.sleep(1)
 
     if status_payload.get("last_error"):
-        print(f"{Colors.RED}[!] Update failed: {status_payload.get('last_error')}{Colors.RESET}")
+        print(
+            f"{Colors.RED}[!] Update failed: {status_payload.get('last_error')}{Colors.RESET}"
+        )
         return
 
     done_message = status_payload.get("last_update_message") or "Update complete."
@@ -430,21 +430,28 @@ def main() -> None:
         startup_update_status = None
         try:
             from wp_hunter.server import update_manager as server_update_manager
+
             update_manager = server_update_manager
             startup_update_status = update_manager.manager.get_status(force=False)
         except Exception:
-            logging.getLogger("wp_hunter.update").warning("CLI startup release warmup failed.", exc_info=True)
+            logging.getLogger("wp_hunter.update").warning(
+                "CLI startup release warmup failed.", exc_info=True
+            )
 
         if args.check_update:
             if not update_manager:
-                print(f"{Colors.RED}[!] Update subsystem is not available.{Colors.RESET}")
+                print(
+                    f"{Colors.RED}[!] Update subsystem is not available.{Colors.RESET}"
+                )
                 return
             run_check_update(update_manager)
             return
 
         if args.update:
             if not update_manager:
-                print(f"{Colors.RED}[!] Update subsystem is not available.{Colors.RESET}")
+                print(
+                    f"{Colors.RED}[!] Update subsystem is not available.{Colors.RESET}"
+                )
                 return
             run_update(update_manager)
             return
@@ -471,7 +478,7 @@ def main() -> None:
 
         # Database stats
         if args.db_stats:
-            run_db_stats(args)
+            run_db_stats()
             return
 
         # Database query mode

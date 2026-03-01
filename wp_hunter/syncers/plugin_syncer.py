@@ -46,7 +46,6 @@ class SyncConfig:
     browse_type: str = "updated"
     workers: int = 10
     rate_limit_delay: float = 0.1
-    save_batch_size: int = 100
 
 
 @dataclass
@@ -75,8 +74,6 @@ class PluginSyncer:
         self.progress = SyncProgress()
         self.stop_event = threading.Event()
         self.repository = PluginMetadataRepository()
-        self._plugins_buffer: List[Dict[str, Any]] = []
-        self._buffer_lock = threading.Lock()
 
     def fetch_page(self, page: int) -> List[Dict[str, Any]]:
         session = get_sync_session(self.config.workers * 2)
@@ -159,30 +156,6 @@ class PluginSyncer:
 
         return []
 
-    def fetch_plugin_info(self, slug: str) -> Optional[Dict[str, Any]]:
-        session = get_sync_session()
-        url = f"https://api.wordpress.org/plugins/info/1.2/?action=plugin_information&request[slug]={slug}"
-
-        try:
-            response = session.get(url, timeout=15)
-            if response.status_code == 200:
-                return response.json()
-        except Exception as e:
-            with print_lock:
-                print(f"{Colors.RED}[!] Error fetching {slug}: {e}{Colors.RESET}")
-
-        return None
-
-    def _save_buffer(self) -> int:
-        with self._buffer_lock:
-            if not self._plugins_buffer:
-                return 0
-
-            plugins_to_save = self._plugins_buffer.copy()
-            self._plugins_buffer.clear()
-
-        return self.repository.bulk_upsert(plugins_to_save)
-
     def _process_page(self, page: int) -> int:
         if self.stop_event.is_set():
             return 0
@@ -206,8 +179,7 @@ class PluginSyncer:
                 return 0
 
             saved = self.repository.bulk_upsert(plugins)
-            with self._buffer_lock:
-                self.progress.plugins_synced += saved
+            self.progress.plugins_synced += saved
             return saved
 
         return 0
@@ -275,10 +247,6 @@ class PluginSyncer:
                     if self.config.rate_limit_delay > 0:
                         time.sleep(self.config.rate_limit_delay)
 
-            # Final buffer save
-            final_saved = self._save_buffer()
-            self.progress.plugins_synced += final_saved
-
             self.progress.is_running = False
 
             if verbose:
@@ -311,34 +279,3 @@ class PluginSyncer:
 
     def stop(self):
         self.stop_event.set()
-
-    def sync_specific_slugs(self, slugs: List[str], verbose: bool = True) -> int:
-        if verbose:
-            print(
-                f"\n{Colors.CYAN}Syncing {len(slugs)} specific plugins...{Colors.RESET}"
-            )
-
-        synced = 0
-
-        with ThreadPoolExecutor(max_workers=self.config.workers) as executor:
-            future_to_slug = {
-                executor.submit(self.fetch_plugin_info, slug): slug for slug in slugs
-            }
-
-            for future in as_completed(future_to_slug):
-                slug = future_to_slug[future]
-                try:
-                    plugin_data = future.result()
-                    if plugin_data:
-                        if self.repository.upsert_plugin(plugin_data):
-                            synced += 1
-                            if verbose:
-                                print(f"  {Colors.GREEN}✓{Colors.RESET} {slug}")
-                except Exception as e:
-                    if verbose:
-                        print(f"  {Colors.RED}✗{Colors.RESET} {slug}: {e}")
-
-        if verbose:
-            print(f"\n{Colors.GREEN}Synced {synced}/{len(slugs)} plugins{Colors.RESET}")
-
-        return synced

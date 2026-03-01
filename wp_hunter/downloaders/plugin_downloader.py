@@ -329,16 +329,3 @@ class PluginDownloader:
         if not self.plugins_dir.exists():
             return []
         return [d.name for d in self.plugins_dir.iterdir() if d.is_dir()]
-
-    def get_plugin_path(self, slug: str) -> Optional[Path]:
-        """Get the source path for a downloaded plugin."""
-        try:
-            safe_slug = self._sanitize_slug(slug)
-            source_path = self.plugins_dir / safe_slug / "source"
-            self._ensure_within_base(source_path, self.plugins_dir)
-        except Exception:
-            return None
-
-        if source_path.exists():
-            return source_path
-        return None

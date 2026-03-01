@@ -8,7 +8,6 @@ import time
 import threading
 import requests
 from typing import List, Dict, Any, Optional, Callable
-from datetime import datetime
 from urllib.parse import quote_plus
 
 from wp_hunter.logger import setup_logger
@@ -191,7 +190,6 @@ class PluginScanner:
             res_rate,
             tested_ver,
             sec_flags,
-            feat_flags,
             None,
         )
 
@@ -202,11 +200,11 @@ class PluginScanner:
 
         # Create plugin-focused Google dork (balanced, less noisy)
         google_dork_query = (
-            f"\"{slug}\" "
-            f"intext:\"{slug}\" "
-            f"(\"wordpress plugin\" OR \"wp plugin\" OR \"wordpress.org/plugins/{slug}\") "
+            f'"{slug}" '
+            f'intext:"{slug}" '
+            f'("wordpress plugin" OR "wp plugin" OR "wordpress.org/plugins/{slug}") '
             f"(vulnerability OR exploit OR cve) "
-            f"-\"wordpress theme\" -\"themes/\""
+            f'-"wordpress theme" -"themes/"'
         )
 
         # Create result object
@@ -315,7 +313,9 @@ class PluginScanner:
 
         return {
             "total_found": len(self.results),
-            "high_risk": sum(1 for r in self.results if r.relative_risk in {"HIGH", "CRITICAL"}),
+            "high_risk": sum(
+                1 for r in self.results if r.relative_risk in {"HIGH", "CRITICAL"}
+            ),
             "medium_risk": sum(1 for r in self.results if r.relative_risk == "MEDIUM"),
             "abandoned": sum(1 for r in self.results if r.days_since_update > 730),
             "user_facing": sum(1 for r in self.results if r.is_user_facing),

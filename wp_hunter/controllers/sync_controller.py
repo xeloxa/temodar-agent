@@ -2,7 +2,6 @@
 Sync Controller for WP-Hunter
 """
 
-from typing import Optional
 from wp_hunter.config import Colors
 from wp_hunter.syncers.plugin_syncer import PluginSyncer, SyncConfig
 from wp_hunter.database.plugin_metadata import PluginMetadataRepository

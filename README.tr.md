@@ -104,7 +104,7 @@ WP-Hunter artık görsel araştırmacılar için güçlü bir yerel dashboard su
 ### Ön Koşullar
 - Python 3.8 veya üzeri
 - pip (Python paket yöneticisi)
-- [Semgrep](https://semgrep.dev/docs/getting-started/) (İsteğe bağlı, derin analiz için)
+- Python 3.10+ ortamında `pip install -r requirements.txt` ile Semgrep otomatik kurulur
 
 ### Kurulum Adımları
 1. Repoyu klonlayın:
@@ -195,3 +195,9 @@ Skor (0-100), **yamanmamış** veya **bilinmeyen** güvenlik açıklarının ola
 ## ⚖️ Yasal Sorumluluk Reddi
 
 Bu araç yalnızca **güvenlik araştırması ve yetkili keşif** amaçları için tasarlanmıştır. Güvenlik profesyonellerinin ve geliştiricilerin saldırı yüzeylerini değerlendirmesine ve eklenti sağlığını analiz etmesine yardımcı olmayı amaçlar. Yazarlar herhangi bir kötüye kullanımdan sorumlu değildir. Güvenlikle ilgili herhangi bir faaliyet gerçekleştirmeden önce her zaman uygun yetkilendirmeye sahip olduğunuzdan emin olun.
+
+## 📄 Lisans Notları
+
+- WP-Hunter, MIT lisansı ile lisanslanmıştır (`LICENSE`).
+- Semgrep üçüncü taraf tarayıcı olarak kullanılır ve kendi `LGPL-2.1` lisansına tabidir.
+- Detaylar için `THIRD_PARTY_LICENSES.md` dosyasına bakın.

@@ -2,6 +2,7 @@
 let currentScanId = null;
 let socket = null;
 let detailsPollingInterval = null; // Polling interval for scan details
+let modalReturnHash = 'history';
 window.currentScanResults = []; // Store results for modal access
 window.favoriteSlugs = new Set(); // Fast lookup for favorite state
 const SYSTEM_STATUS_POLL_INTERVAL = 15000;
@@ -405,9 +406,6 @@ function isFavoriteSlug(slug) {
 
 document.addEventListener('DOMContentLoaded', () => {
     // Initial setup
-    // Form listeners removed - updateCommand was empty
-    const form = document.getElementById('configForm');
-    
     // Load history
     loadHistory();
     
@@ -439,6 +437,10 @@ document.addEventListener('DOMContentLoaded', () => {
 // Restore view from URL hash
 function restoreViewFromHash() {
     const hash = window.location.hash.replace('#', '');
+
+    if (hash && !hash.startsWith('plugin/')) {
+        modalReturnHash = hash;
+    }
     if (!hash) return;
     
     // Check for details view: details/123
@@ -600,10 +602,6 @@ window.switchTab = function(tabId) {
     if (tabId !== 'details') {
         window.location.hash = tabId;
     }
-}
-
-function updateCommand() {
-    // Removed - was empty function
 }
 
 window.runScan = async function() {
@@ -1334,6 +1332,34 @@ async function pollBulkProgress(sessionId) {
     }, 1000);
 }
 
+function setDeepScanButtonState(state) {
+    const btn = document.getElementById('btn-deep-scan');
+    if (!btn) return;
+
+    if (state === 'scanning') {
+        btn.disabled = true;
+        btn.textContent = 'SCANNING...';
+        return;
+    }
+
+    if (state === 'rescan') {
+        btn.disabled = false;
+        btn.textContent = 'RE-SCAN';
+        btn.style.borderColor = 'var(--accent-primary)';
+        btn.style.color = 'var(--accent-primary)';
+        btn.style.opacity = '1';
+        btn.title = 'Run Semgrep scan again';
+        return;
+    }
+
+    btn.disabled = false;
+    btn.textContent = 'DEEP SCAN';
+    btn.style.borderColor = 'var(--accent-blue)';
+    btn.style.color = 'var(--accent-blue)';
+    btn.style.opacity = '1';
+    btn.title = '';
+}
+
 window.runPluginSemgrep = async function(slug, downloadUrl) {
     // Check if any rulesets are enabled
     try {
@@ -1356,11 +1382,7 @@ window.runPluginSemgrep = async function(slug, downloadUrl) {
     const confirmed = await showConfirm(`Run deep Semgrep analysis on ${slug}? This may take a few minutes.`);
     if(!confirmed) return;
 
-    const btn = document.getElementById('btn-deep-scan');
-    if(btn) {
-        btn.disabled = true;
-        btn.textContent = 'SCANNING...';
-    }
+    setDeepScanButtonState('scanning');
 
     try {
         const response = await fetch('/api/semgrep/scan', {
@@ -1376,17 +1398,11 @@ window.runPluginSemgrep = async function(slug, downloadUrl) {
             pollSemgrepResults(slug);
         } else {
             showToast('Failed to start scan', 'error');
-            if(btn) {
-                btn.disabled = false;
-                btn.textContent = 'DEEP SCAN';
-            }
+            setDeepScanButtonState('rescan');
         }
     } catch(e) {
         showToast('Error: ' + e.message, 'error');
-        if(btn) {
-            btn.disabled = false;
-            btn.textContent = 'DEEP SCAN';
-        }
+        setDeepScanButtonState('rescan');
     }
 }
 
@@ -1402,11 +1418,7 @@ async function pollSemgrepResults(slug) {
             } else if (data.status === 'failed') {
                 clearInterval(interval);
                 showToast('Semgrep scan failed: ' + (data.error_message || 'Unknown error'), 'error');
-                const btn = document.getElementById('btn-deep-scan');
-                if(btn) {
-                    btn.disabled = false;
-                    btn.textContent = 'DEEP SCAN';
-                }
+                setDeepScanButtonState('rescan');
             }
         } catch(e) {
             clearInterval(interval);
@@ -1420,6 +1432,7 @@ function loadSemgrepResultsIntoModal(scanData) {
 
     if (!scanData || !scanData.findings || scanData.findings.length === 0) {
         container.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--accent-primary); border: 1px dashed var(--accent-primary); border-radius: 4px; background: rgba(0,255,157,0.05);">✅ No issues found by Semgrep. Code looks clean.</div>';
+        setDeepScanButtonState('rescan');
         return;
     }
 
@@ -1442,18 +1455,19 @@ function loadSemgrepResultsIntoModal(scanData) {
 
     container.innerHTML = html;
 
-    const btn = document.getElementById('btn-deep-scan');
-    if(btn) {
-        btn.disabled = true; // Keep disabled as we have results
-        btn.textContent = 'SCAN COMPLETE';
-        btn.style.borderColor = 'var(--accent-primary)';
-        btn.style.color = 'var(--accent-primary)';
-    }
+    setDeepScanButtonState('rescan');
 }
 
 window.openPluginModal = function(index) {
     const plugin = window.currentScanResults[index];
     if (!plugin) return;
+
+    const currentHash = window.location.hash.replace('#', '').trim();
+    if (currentHash && !currentHash.startsWith('plugin/')) {
+        modalReturnHash = currentHash;
+    } else if (!modalReturnHash || modalReturnHash.startsWith('plugin/')) {
+        modalReturnHash = currentScanId ? `details/${currentScanId}` : 'history';
+    }
 
     // Update URL hash for plugin modal, include scan ID if available
     const scanIdPart = currentScanId ? `/${currentScanId}` : '';
@@ -1528,6 +1542,8 @@ window.openPluginModal = function(index) {
         </div>
     `;
 
+    setDeepScanButtonState('default');
+
     // Check if scan already exists
     fetch(`/api/semgrep/scan/${plugin.slug}`)
         .then(res => res.json())
@@ -1536,11 +1552,7 @@ window.openPluginModal = function(index) {
                 loadSemgrepResultsIntoModal(data);
             } else if (data.status === 'running' || data.status === 'pending') {
                 document.getElementById('semgrep-results-container').innerHTML = '<div style="text-align: center; padding: 20px; color: var(--accent-blue);">Scan in progress...</div>';
-                const btn = document.getElementById('btn-deep-scan');
-                if(btn) {
-                    btn.disabled = true;
-                    btn.textContent = 'SCANNING...';
-                }
+                setDeepScanButtonState('scanning');
                 pollSemgrepResults(plugin.slug);
             }
         })
@@ -1568,25 +1580,15 @@ window.openPluginModal = function(index) {
 
 window.closeModal = function() {
     document.getElementById('plugin-modal').classList.remove('active');
-    
-    // Clear plugin hash when modal closes, revert to previous view or scan
+
     const currentHash = window.location.hash;
     if (currentHash.startsWith('#plugin/')) {
-        // Try to get scanId from URL if currentScanId is not set
-        let scanId = currentScanId;
-        if (!scanId) {
-            const parts = currentHash.split('/');
-            if (parts[2] && !isNaN(parseInt(parts[2]))) {
-                scanId = parseInt(parts[2]);
-            }
-        }
-        
-        // Go back to scan details if we came from there, otherwise go to history
-        if (scanId) {
-            window.location.hash = `details/${scanId}`;
-        } else {
-            window.location.hash = 'history';
-        }
+        const fallbackHash = currentScanId ? `details/${currentScanId}` : 'history';
+        const targetHash =
+            modalReturnHash && !modalReturnHash.startsWith('plugin/')
+                ? modalReturnHash
+                : fallbackHash;
+        window.location.hash = targetHash;
     }
 }
 
@@ -1595,39 +1597,13 @@ window.closeModal = function() {
 // ==========================================
 
 window.loadSemgrepRules = async function() {
-    const statusEl = document.getElementById('semgrep-status');
-    const ruleCountEl = document.getElementById('semgrep-rule-count');
-    const customCountEl = document.getElementById('semgrep-custom-count');
     const rulesListEl = document.getElementById('semgrep-rules-list');
 
-    if (!statusEl) return;
-
-    statusEl.textContent = 'Loading...';
-    statusEl.style.color = '#ffbd2e';
+    if (!rulesListEl) return;
 
     try {
         const response = await fetch('/api/semgrep/rules');
         const data = await response.json();
-
-        // Update status
-        if (data.installed) {
-            statusEl.textContent = 'INSTALLED';
-            statusEl.style.color = 'var(--accent-primary)';
-        } else {
-            statusEl.textContent = 'NOT INSTALLED';
-            statusEl.style.color = 'var(--accent-secondary)';
-        }
-
-        // Update counts
-        const activeRulesets = (data.rulesets || []).filter(r => r.enabled).length;
-        ruleCountEl.textContent = activeRulesets; // Renamed label to "ACTIVE PACKS" in HTML
-        customCountEl.textContent = data.custom_rules ? data.custom_rules.length : 0;
-
-        // Clean up UI - Remove old registry count if exists
-        const registryCountEl = document.getElementById('semgrep-registry-count');
-        if (registryCountEl && registryCountEl.parentNode) {
-            registryCountEl.parentNode.style.display = 'none';
-        }
 
         // 1. RENDER RULESETS
         let html = '';
@@ -1638,11 +1614,6 @@ window.loadSemgrepRules = async function() {
                 <button onclick="addSemgrepRuleset()" class="action-btn" style="width:auto; padding:8px 12px; background: rgba(0, 255, 157, 0.1); border: 1px solid rgba(0, 255, 157, 0.35); color: var(--accent-primary); font-size:11px;">
                     ADD RULESET
                 </button>
-            </div>`;
-        html += `<div style="margin: -4px 0 14px 0;">
-                <a href="https://semgrep.dev/explore" target="_blank" class="tag safe" style="text-decoration: none; cursor: pointer; padding: 8px 14px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; border-radius: 4px; border: 1px solid rgba(0, 255, 157, 0.3); background: rgba(0, 255, 157, 0.05); font-size: 11px;">
-                    <span>🔍</span> Explore 3000+ Community Rules on Semgrep Registry →
-                </a>
             </div>`;
 
         const formatRulesetLabel = (rs) => {
@@ -1694,10 +1665,33 @@ window.loadSemgrepRules = async function() {
             html += '<div style="text-align: center; color: #666; padding: 12px; border: 1px dashed #333; border-radius: 4px; margin-bottom: 10px;">No rulesets found. Add one above (example: p/cwe-top-25).</div>';
         }
 
-        // 2. RENDER CUSTOM RULES
-        html += `<h3 style="font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); margin-bottom: 15px; border-bottom: 1px solid #222; padding-bottom: 8px; margin-top: 30px;">✏️ CUSTOM RULES</h3>`;
-
         const customRules = data.custom_rules || [];
+        const enabledCustomRules = customRules.filter(rule => rule.enabled).length;
+        const allCustomRulesEnabled = customRules.length > 0 && enabledCustomRules === customRules.length;
+        const bulkToggleTargetEnabled = !allCustomRulesEnabled;
+        const bulkToggleLabel = allCustomRulesEnabled ? 'ALL OFF' : 'ALL ON';
+        const bulkToggleStyles = allCustomRulesEnabled
+            ? 'background: rgba(255,0,85,0.1); color: #ff0055; border: 1px solid rgba(255,0,85,0.35);'
+            : 'background: rgba(0,255,157,0.1); color: var(--accent-primary); border: 1px solid rgba(0,255,157,0.35);';
+        const bulkToggleDisabled = customRules.length === 0;
+        const bulkToggleDisabledAttr = bulkToggleDisabled
+            ? 'disabled title="No custom rules to toggle"'
+            : '';
+        const bulkToggleResolvedStyles = bulkToggleDisabled
+            ? 'opacity:0.6; cursor:not-allowed; border:1px solid #444; color:#777; background:rgba(90,90,90,0.1);'
+            : bulkToggleStyles;
+
+        // 2. RENDER CUSTOM RULES
+        html += `<div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:30px; margin-bottom:15px; border-bottom:1px solid #222; padding-bottom:8px;">
+                    <h3 style="font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); margin:0;">✏️ CUSTOM RULES</h3>
+                    <button
+                        onclick="toggleAllCustomRules(${bulkToggleTargetEnabled})"
+                        class="action-btn"
+                        style="width:auto; padding:6px 10px; font-size:10px; ${bulkToggleResolvedStyles}"
+                        ${bulkToggleDisabledAttr}
+                    >${bulkToggleLabel}</button>
+                </div>`;
+
         if (customRules.length > 0) {
             html += customRules.map(rule => `
                 <div style="background: ${!rule.enabled ? 'rgba(30, 30, 30, 0.5)' : '#141416'}; border: 1px solid ${!rule.enabled ? '#333' : 'var(--accent-primary)'}; border-radius: 4px; padding: 15px; margin-bottom: 10px; opacity: ${!rule.enabled ? '0.6' : '1'}; transition: all 0.2s;">
@@ -1731,8 +1725,6 @@ window.loadSemgrepRules = async function() {
 
     } catch (error) {
         console.error('Error loading Semgrep rules:', error);
-        statusEl.textContent = 'ERROR';
-        statusEl.style.color = 'var(--accent-secondary)';
         rulesListEl.innerHTML = `<div style="text-align: center; color: var(--accent-secondary); padding: 30px;">Error loading rules: ${escapeHtml(error.message)}</div>`;
     }
 }
@@ -1742,15 +1734,21 @@ window.toggleRuleset = async function(rulesetId) {
         const response = await fetch(`/api/semgrep/rulesets/${encodeURIComponent(rulesetId)}/toggle`, {
             method: 'POST'
         });
-        const data = await response.json();
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+            showToast('Failed to toggle ruleset: ' + (data.detail || data.error || `HTTP ${response.status}`), 'error');
+            return;
+        }
 
         if (data.success) {
             loadSemgrepRules(); // Reload UI
         } else {
-            showToast('Failed to toggle ruleset', 'error');
+            showToast('Failed to toggle ruleset: ' + (data.detail || data.error || 'Unknown error'), 'error');
         }
     } catch (error) {
         console.error('Error toggling ruleset:', error);
+        showToast('Error toggling ruleset: ' + (error.message || 'unknown error'), 'error');
     }
 }
 
@@ -1765,7 +1763,11 @@ window.deleteRuleset = async function(rulesetId, deletable = true) {
         const response = await fetch(`/api/semgrep/rulesets/${encodeURIComponent(rulesetId)}`, {
             method: 'DELETE'
         });
-        const data = await response.json();
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            showToast('Failed to delete ruleset: ' + (data.detail || data.error || `HTTP ${response.status}`), 'error');
+            return;
+        }
         if (data.success) {
             showToast(`Ruleset deleted: ${rulesetId}`, 'success');
             loadSemgrepRules();
@@ -1798,7 +1800,12 @@ window.addSemgrepRuleset = async function() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ruleset })
         });
-        const data = await response.json();
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+            showToast('Failed to add ruleset: ' + (data.detail || data.error || `HTTP ${response.status}`), 'error');
+            return;
+        }
 
         if (data.success) {
             if (input) input.value = '';
@@ -1817,15 +1824,58 @@ window.toggleSemgrepRule = async function(ruleId) {
         const response = await fetch(`/api/semgrep/rules/${encodeURIComponent(ruleId)}/toggle`, {
             method: 'POST'
         });
-        const data = await response.json();
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+            showToast('Failed to toggle rule: ' + (data.detail || data.error || `HTTP ${response.status}`), 'error');
+            return;
+        }
 
         if (data.success) {
             loadSemgrepRules(); // Reload UI
         } else {
-            showToast('Failed to toggle rule', 'error');
+            showToast('Failed to toggle rule: ' + (data.detail || data.error || 'Unknown error'), 'error');
         }
     } catch (error) {
         console.error('Error toggling rule:', error);
+        showToast('Error toggling rule: ' + (error.message || 'unknown error'), 'error');
+    }
+}
+
+window.toggleAllCustomRules = async function(enabled) {
+    try {
+        let response = await fetch('/api/semgrep/rules/actions/toggle-all', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled })
+        });
+
+        if (response.status === 404 || response.status === 405) {
+            response = await fetch('/api/semgrep/rules/toggle-all', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled })
+            });
+        }
+
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+            showToast('Failed to update custom rules: ' + (data.detail || data.error || `HTTP ${response.status}`), 'error');
+            return;
+        }
+
+        if (data.success) {
+            showToast(
+                `${enabled ? 'Enabled' : 'Disabled'} ${data.changed}/${data.total} custom rule(s)`,
+                'success'
+            );
+            loadSemgrepRules();
+        } else {
+            showToast('Failed to update custom rules', 'error');
+        }
+    } catch (error) {
+        showToast('Error updating custom rules: ' + (error.message || 'unknown error'), 'error');
     }
 }
 
@@ -1888,12 +1938,17 @@ window.deleteSemgrepRule = async function(ruleId) {
             method: 'DELETE'
         });
 
-        const data = await response.json();
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+            showToast('Failed to delete rule: ' + (data.detail || data.error || `HTTP ${response.status}`), 'error');
+            return;
+        }
 
         if (data.success) {
             loadSemgrepRules();
         } else {
-            showToast('Failed to delete rule: ' + (data.error || 'Unknown error'), 'error');
+            showToast('Failed to delete rule: ' + (data.detail || data.error || 'Unknown error'), 'error');
         }
     } catch (error) {
         showToast('Error deleting rule: ' + error.message, 'error');

@@ -17,7 +17,6 @@ def calculate_vps_score(
     support_rate: int,
     tested_ver: str,
     sec_flags: List[str],
-    feat_flags: List[str],
     code_analysis: Optional[CodeAnalysisResult] = None,
 ) -> int:
     """
@@ -142,7 +141,11 @@ def calculate_vps_score(
     if days_ago < 30:
         score = max(0, score - 4)
 
-    if code_analysis and code_analysis.nonce_usage and not code_analysis.sanitization_issues:
+    if (
+        code_analysis
+        and code_analysis.nonce_usage
+        and not code_analysis.sanitization_issues
+    ):
         score = max(0, score - 4)
 
     # 10. False-positive guardrails: high scores require corroboration
@@ -168,16 +171,6 @@ def get_score_display(score: int) -> str:
         return f"{Colors.YELLOW}[{bar}] {score} (MEDIUM){Colors.RESET}"
     else:
         return f"{Colors.GREEN}[{bar}] {score} (LOW){Colors.RESET}"
-
-
-def get_score_class(score: int) -> str:
-    """Get CSS class for score display in HTML."""
-    if score >= 40:
-        return "score-high"
-    elif score >= 20:
-        return "score-med"
-    else:
-        return "score-low"
 
 
 def get_score_level(score: int) -> str:

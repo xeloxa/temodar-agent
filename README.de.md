@@ -195,3 +195,9 @@ Der Score (0-100) spiegelt die Wahrscheinlichkeit von **ungepatchten** oder **un
 ## ⚖️ Rechtlicher Hinweis
 
 Dieses Tool ist nur für **Sicherheitsforschung und autorisierte Aufklärung** bestimmt. Es soll Sicherheitsexperten und Entwicklern helfen, Angriffsflächen zu bewerten und die Gesundheit von Plugins zu analysieren. Die Autoren sind nicht für Missbrauch verantwortlich. Stellen Sie immer sicher, dass Sie über die entsprechende Autorisierung verfügen, bevor Sie sicherheitsrelevante Aktivitäten durchführen.
+
+## 📄 Lizenzhinweise
+
+- WP-Hunter ist unter der MIT-Lizenz lizenziert (`LICENSE`).
+- Semgrep wird als Drittanbieter-Scanner verwendet und unterliegt weiterhin seiner eigenen `LGPL-2.1`-Lizenz.
+- Details finden Sie in `THIRD_PARTY_LICENSES.md`.

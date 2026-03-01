@@ -19,6 +19,7 @@ from wp_hunter.server.schemas import (
     DownloadRequest,
     SemgrepRuleRequest,
     SemgrepRulesetRequest,
+    SemgrepBulkToggleRequest,
 )
 from wp_hunter.database.repository import ScanRepository
 from wp_hunter.downloaders.plugin_downloader import PluginDownloader
@@ -29,6 +30,10 @@ from wp_hunter.scanners.semgrep_scanner import (
     SEMGREP_COMMUNITY_SOURCES,
 )
 from wp_hunter.server.limiter import limiter
+from wp_hunter.infrastructure.semgrep_runtime import (
+    get_semgrep_command,
+    is_semgrep_available,
+)
 
 router = APIRouter(prefix="/api/semgrep", tags=["semgrep"])
 repo = ScanRepository()
@@ -67,8 +72,7 @@ if not CUSTOM_RULES_PATH.exists() and PACKAGE_CUSTOM_RULES_PATH.exists():
 def get_disabled_config() -> Dict[str, List[str]]:
     """Load disabled rules and rulesets configuration."""
     default_config = {"rules": [], "rulesets": [], "extra_rulesets": []}
-    # Legacy default packs we no longer want to keep automatically.
-    legacy_default_rulesets = {"p/cwe-top-25", "cwe-top-25"}
+    legacy_default_rulesets = {"cwe-top-25"}
     if DISABLED_CONFIG_PATH.exists():
         try:
             with open(DISABLED_CONFIG_PATH, "r") as f:
@@ -94,12 +98,18 @@ def get_disabled_config() -> Dict[str, List[str]]:
                 )
                 # Migration: remove legacy defaults from persisted state.
                 normalized["rulesets"] = [
-                    r for r in normalized["rulesets"] if r not in legacy_default_rulesets
+                    r
+                    for r in normalized["rulesets"]
+                    if r not in legacy_default_rulesets
                 ]
                 normalized["extra_rulesets"] = [
-                    r for r in normalized["extra_rulesets"] if r not in legacy_default_rulesets
+                    r
+                    for r in normalized["extra_rulesets"]
+                    if r not in legacy_default_rulesets
                 ]
-                if before_rulesets != set(normalized["rulesets"]) or before_extras != set(normalized["extra_rulesets"]):
+                if before_rulesets != set(
+                    normalized["rulesets"]
+                ) or before_extras != set(normalized["extra_rulesets"]):
                     save_disabled_config(normalized)
                 return normalized
         except Exception:
@@ -155,13 +165,8 @@ def _validate_semgrep_rules_config(rules_config: Dict[str, Any]) -> Optional[str
     Validate Semgrep config before persisting.
     Returns None if valid, otherwise returns a human-readable error message.
     """
-    try:
-        check = subprocess.run(
-            ["semgrep", "--version"], capture_output=True, text=True, timeout=10
-        )
-        if check.returncode != 0:
-            return "Semgrep is not available for rule validation."
-    except Exception:
+    semgrep_command = get_semgrep_command()
+    if not semgrep_command:
         return "Semgrep is not available for rule validation."
 
     temp_path = None
@@ -173,7 +178,7 @@ def _validate_semgrep_rules_config(rules_config: Dict[str, Any]) -> Optional[str
             temp_path = tmp.name
 
         result = subprocess.run(
-            ["semgrep", "--validate", "--config", temp_path],
+            [*semgrep_command, "--validate", "--config", temp_path],
             capture_output=True,
             text=True,
             timeout=30,
@@ -181,7 +186,9 @@ def _validate_semgrep_rules_config(rules_config: Dict[str, Any]) -> Optional[str
         if result.returncode == 0:
             return None
 
-        error_text = (result.stderr or result.stdout or "Unknown Semgrep validation error").strip()
+        error_text = (
+            result.stderr or result.stdout or "Unknown Semgrep validation error"
+        ).strip()
         # Keep UI errors readable.
         return error_text[:800]
     except subprocess.TimeoutExpired:
@@ -237,7 +244,9 @@ async def run_plugin_semgrep_scan(
             try:
                 shutil.copy2(CUSTOM_RULES_PATH, output_dir / "custom_rules.yaml")
             except Exception:
-                logger.warning("Failed to copy custom Semgrep rules into scan directory.")
+                logger.warning(
+                    "Failed to copy custom Semgrep rules into scan directory."
+                )
 
         disabled_rules = get_disabled_config().get("rules", [])
         if disabled_rules:
@@ -399,14 +408,7 @@ async def get_semgrep_scan(slug: str):
 @router.get("/rules")
 async def get_semgrep_rules():
     """Get Semgrep configuration (rulesets and custom rules)."""
-    # Check if Semgrep is installed
-    try:
-        result = subprocess.run(
-            ["semgrep", "--version"], capture_output=True, text=True, timeout=10
-        )
-        installed = result.returncode == 0
-    except Exception:
-        installed = False
+    installed = is_semgrep_available()
 
     disabled_config = get_disabled_config()
     disabled_rules = set(disabled_config["rules"])
@@ -552,9 +554,9 @@ async def add_semgrep_rule(rule: SemgrepRuleRequest):
 async def delete_semgrep_rule(rule_id: str):
     """Delete a custom Semgrep rule."""
     # Security: Validate rule_id format
-    if not re.match(r'^[a-zA-Z0-9_-]+$', rule_id):
+    if not re.match(r"^[a-zA-Z0-9_-]+$", rule_id):
         raise HTTPException(status_code=400, detail="Invalid rule ID format")
-    
+
     if not CUSTOM_RULES_PATH.exists():
         raise HTTPException(status_code=404, detail="No custom rules file found")
 
@@ -586,9 +588,9 @@ async def delete_semgrep_rule(rule_id: str):
 async def toggle_custom_rule(rule_id: str):
     """Enable or disable a custom Semgrep rule."""
     # Security: Validate rule_id format
-    if not re.match(r'^[a-zA-Z0-9_-]+$', rule_id):
+    if not re.match(r"^[a-zA-Z0-9_-]+$", rule_id):
         raise HTTPException(status_code=400, detail="Invalid rule ID format")
-    
+
     config = get_disabled_config()
 
     if rule_id in config["rules"]:
@@ -603,6 +605,67 @@ async def toggle_custom_rule(rule_id: str):
         return {"success": True, "rule_id": rule_id, "enabled": False}
 
 
+@router.post("/rules/toggle-all")
+@router.post("/rules/actions/toggle-all")
+async def toggle_all_custom_rules(toggle_request: SemgrepBulkToggleRequest):
+    if not CUSTOM_RULES_PATH.exists():
+        return {
+            "success": True,
+            "enabled": toggle_request.enabled,
+            "changed": 0,
+            "total": 0,
+        }
+
+    try:
+        with open(CUSTOM_RULES_PATH, "r") as f:
+            rules_data = yaml.safe_load(f) or {"rules": []}
+    except Exception:
+        rules_data = {"rules": []}
+
+    custom_rule_ids: List[str] = []
+    for rule in rules_data.get("rules", []):
+        if not isinstance(rule, dict):
+            continue
+        rule_id = rule.get("id")
+        if isinstance(rule_id, str) and re.match(r"^[a-zA-Z0-9_-]+$", rule_id):
+            custom_rule_ids.append(rule_id)
+
+    if not custom_rule_ids:
+        return {
+            "success": True,
+            "enabled": toggle_request.enabled,
+            "changed": 0,
+            "total": 0,
+        }
+
+    config = get_disabled_config()
+    disabled_rules = set(config.get("rules", []))
+    total = len(custom_rule_ids)
+
+    if toggle_request.enabled:
+        changed = 0
+        for rule_id in custom_rule_ids:
+            if rule_id in disabled_rules:
+                disabled_rules.remove(rule_id)
+                changed += 1
+    else:
+        changed = 0
+        for rule_id in custom_rule_ids:
+            if rule_id not in disabled_rules:
+                disabled_rules.add(rule_id)
+                changed += 1
+
+    config["rules"] = sorted(disabled_rules)
+    save_disabled_config(config)
+
+    return {
+        "success": True,
+        "enabled": toggle_request.enabled,
+        "changed": changed,
+        "total": total,
+    }
+
+
 @router.post("/rulesets")
 async def add_ruleset(ruleset_request: SemgrepRulesetRequest):
     """Add a Semgrep ruleset (e.g., p/cwe-top-25) and enable it."""
@@ -610,11 +673,14 @@ async def add_ruleset(ruleset_request: SemgrepRulesetRequest):
     if not ruleset:
         raise HTTPException(status_code=400, detail="Ruleset cannot be empty")
 
-    if not re.match(r'^[a-zA-Z0-9_./-]+$', ruleset):
+    if not re.match(r"^[a-zA-Z0-9_./-]+$", ruleset):
         raise HTTPException(status_code=400, detail="Invalid ruleset format")
 
     config = get_disabled_config()
-    if ruleset not in config["extra_rulesets"] and ruleset not in SEMGREP_REGISTRY_RULESETS:
+    if (
+        ruleset not in config["extra_rulesets"]
+        and ruleset not in SEMGREP_REGISTRY_RULESETS
+    ):
         config["extra_rulesets"].append(ruleset)
 
     # Auto-enable after add.
@@ -630,13 +696,11 @@ async def toggle_ruleset(ruleset_id: str):
     """Enable or disable a Semgrep ruleset."""
     ruleset_id = _canonicalize_ruleset_value(ruleset_id)
     # Security: Validate ruleset_id format
-    if not re.match(r'^[a-zA-Z0-9_./-]+$', ruleset_id):
+    if not re.match(r"^[a-zA-Z0-9_./-]+$", ruleset_id):
         raise HTTPException(status_code=400, detail="Invalid ruleset ID format")
 
     config = get_disabled_config()
-    available_rulesets = set(CORE_RULESET_KEYS) | set(
-        config.get("extra_rulesets", [])
-    )
+    available_rulesets = set(CORE_RULESET_KEYS) | set(config.get("extra_rulesets", []))
 
     if ruleset_id not in available_rulesets:
         raise HTTPException(status_code=404, detail=f"Ruleset '{ruleset_id}' not found")
@@ -657,11 +721,13 @@ async def toggle_ruleset(ruleset_id: str):
 async def delete_ruleset(ruleset_id: str):
     """Delete a user-added Semgrep ruleset."""
     ruleset_id = _canonicalize_ruleset_value(ruleset_id)
-    if not re.match(r'^[a-zA-Z0-9_./-]+$', ruleset_id):
+    if not re.match(r"^[a-zA-Z0-9_./-]+$", ruleset_id):
         raise HTTPException(status_code=400, detail="Invalid ruleset ID format")
 
     if ruleset_id in CORE_RULESET_KEYS or ruleset_id in CORE_RULESET_CONFIGS:
-        raise HTTPException(status_code=400, detail="Built-in rulesets cannot be deleted")
+        raise HTTPException(
+            status_code=400, detail="Built-in rulesets cannot be deleted"
+        )
 
     config = get_disabled_config()
     extras = config.get("extra_rulesets", [])

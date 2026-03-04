@@ -16,6 +16,7 @@ class ScanStatus(Enum):
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
+    MERGED = "merged"
     FAILED = "failed"
     CANCELLED = "cancelled"
 

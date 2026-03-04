@@ -18,7 +18,7 @@ from starlette.responses import PlainTextResponse
 
 from wp_hunter.server.websockets import manager
 from wp_hunter.server import update_manager
-from wp_hunter.server.routers import scans, semgrep, plugins, favorites, config, system
+from wp_hunter.server.routers import scans, semgrep, plugins, favorites, config, system, catalog
 from wp_hunter.server.limiter import limiter
 from wp_hunter import __version__
 
@@ -77,6 +77,7 @@ def create_app() -> FastAPI:
     app.include_router(semgrep.router)
     app.include_router(plugins.router)
     app.include_router(favorites.router)
+    app.include_router(catalog.router)
     app.include_router(config.router)
     app.include_router(system.router)
 
@@ -90,7 +91,7 @@ def create_app() -> FastAPI:
         app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
 
     @app.get("/", response_class=HTMLResponse)
-    @limiter.limit("10/minute")  # Security: Rate limit homepage
+    @limiter.limit("10000/minute")  # Local usage: very high limit
     async def root(request: Request):
         """Serve the main dashboard."""
         index_path = static_dir / "index.html"

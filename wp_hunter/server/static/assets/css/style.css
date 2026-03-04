@@ -594,6 +594,7 @@ body {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 12px;
+    align-items: stretch;
 }
 
 .metric-card {
@@ -947,6 +948,135 @@ body {
     background: rgba(0, 0, 0, 0.25);
 }
 
+.recent-history-row {
+    grid-template-columns: auto auto minmax(136px, 1fr) minmax(120px, 1fr) auto auto;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    min-height: 38px;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.recent-history-row:hover,
+.recent-history-row:focus-within {
+    background: rgba(255, 255, 255, 0.03);
+    border-color: rgba(255, 255, 255, 0.14);
+}
+
+.recent-history-id {
+    margin-bottom: 0;
+    min-width: 34px;
+}
+
+.recent-history-row .dashboard-history-open {
+    justify-self: start;
+    pointer-events: auto;
+    cursor: pointer;
+    font-size: 9px;
+    padding: 3px 8px;
+}
+
+.recent-history-row .history-found-cell,
+.recent-history-row .history-risk-cell {
+    min-width: 0;
+    gap: 6px;
+}
+
+.recent-history-row .history-risk-meter,
+.recent-history-row .history-found-track {
+    min-width: 70px;
+    width: 70px;
+    height: 5px;
+}
+
+.recent-history-row .history-date-stamp {
+    color: #9c9c9c;
+    font-size: 10px;
+    white-space: nowrap;
+}
+
+.recent-history-row .history-found-count {
+    font-size: 12px;
+}
+
+.recent-history-row .history-found-label {
+    font-size: 8px;
+}
+
+.recent-history-row .history-risk-pill {
+    min-width: 24px;
+    padding: 2px 6px;
+    font-size: 9px;
+}
+
+.recent-favorites-row {
+    grid-template-columns: minmax(0, 1fr) auto minmax(118px, 0.7fr) auto;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    min-height: 38px;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.recent-favorites-row:hover,
+.recent-favorites-row:focus-within {
+    background: rgba(255, 255, 255, 0.03);
+    border-color: rgba(255, 255, 255, 0.14);
+}
+
+.recent-favorites-slug {
+    margin-bottom: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.recent-favorites-version {
+    color: #9c9c9c;
+    white-space: nowrap;
+}
+
+.recent-favorites-row .recent-favorites-risk {
+    min-width: 0;
+    gap: 6px;
+}
+
+.recent-favorites-row .history-risk-meter {
+    min-width: 70px;
+    width: 70px;
+    height: 5px;
+}
+
+.recent-favorites-row .history-risk-pill {
+    min-width: 24px;
+    padding: 2px 6px;
+    font-size: 9px;
+}
+
+.recent-favorites-row .dashboard-history-open {
+    justify-self: start;
+    pointer-events: auto;
+    cursor: pointer;
+    font-size: 9px;
+    padding: 3px 8px;
+}
+
+@media (max-width: 700px) {
+    .recent-inline .recent-list {
+        overflow-x: auto;
+    }
+
+    .recent-history-row {
+        min-width: 620px;
+    }
+
+    .recent-favorites-row {
+        min-width: 520px;
+    }
+}
+
 .recent-main {
     min-width: 0;
 }
@@ -1062,7 +1192,7 @@ body {
     border-radius: 50%;
     border: 1px solid #444;
     color: #666;
-    font-size: 9px;
+    font-size: 0;
     font-family: var(--font-mono);
     margin-left: 6px;
     cursor: help;
@@ -1078,7 +1208,9 @@ body {
 }
 
 .info-icon::before {
-    content: 'i';
+    content: '?';
+    font-size: 9px;
+    line-height: 1;
     font-weight: 700;
 }
 
@@ -1342,116 +1474,363 @@ output {
 }
 
 #scan-view {
-    padding: 46px;
+    padding: 30px;
+    overflow-y: hidden;
+}
+
+#scan-view .panel {
+    margin-bottom: 0;
 }
 
 #scan-view .panel-body {
-    padding: 24px;
+    padding: 18px;
+}
+
+#scan-view .view-header {
+    margin-bottom: 10px;
 }
 
 #scan-view .dashboard-shell {
     grid-template-columns: minmax(0, 1fr) 380px;
-    gap: 18px;
+    gap: 12px;
+    align-items: stretch;
+}
+
+#scan-view .dashboard-side {
+    align-self: stretch;
+    display: flex;
+    flex-direction: column;
+}
+
+#scan-view .dashboard-side .side-card {
+    height: 100%;
 }
 
 #scan-view .dashboard-main,
 #scan-view .dashboard-metrics,
 #scan-view .dashboard-charts,
 #scan-view .dashboard-snapshot-grid {
-    gap: 14px;
+    gap: 10px;
+}
+
+#scan-view .metric-card,
+#scan-view .chart-card,
+#scan-view .side-card,
+#scan-view .progress-shell {
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.02);
+    box-shadow: none;
 }
 
 #scan-view .metric-card,
 #scan-view .chart-card,
 #scan-view .side-card {
-    padding: 14px;
+    padding: 12px;
 }
 
 #scan-view .metric-label {
-    font-size: 11px;
+    font-size: 10px;
+    color: #95a1ad;
 }
 
 #scan-view .metric-value {
-    font-size: 22px;
+    font-size: 24px;
+    margin-bottom: 4px;
 }
 
 #scan-view .metric-card p,
 #scan-view .recent-meta,
 #scan-view .toggle-desc {
-    font-size: 12px;
+    font-size: 11px;
+    color: #9ba6b2;
 }
 
 #scan-view .chart-head h3,
 #scan-view .progress-top h3,
 #scan-view .recent-title,
 #scan-view .toggle-title {
-    font-size: 13px;
+    font-size: 12px;
 }
 
 #scan-view .chart-head span,
 #scan-view .progress-meta,
 #scan-view .control-group label {
-    font-size: 11px;
+    font-size: 10px;
+    color: #91a0ad;
 }
 
 #scan-view .bar-chart,
 #scan-view .spark-chart {
-    min-height: 128px;
-    gap: 8px;
+    min-height: 112px;
+    gap: 7px;
+}
+
+#scan-view .progress-shell {
+    padding: 10px 12px;
 }
 
 #scan-view .progress-note {
-    font-size: 12px;
+    font-size: 11px;
 }
 
 #scan-view .recent-row {
-    padding: 9px 10px;
+    padding: 8px 9px;
 }
 
 #scan-view .quick-grid,
 #scan-view .advanced-grid {
-    gap: 10px;
+    gap: 8px;
+}
+
+#scan-view .advanced-grid .toggle-card {
+    grid-column: span 1;
 }
 
 #scan-view input[type="number"],
 #scan-view input[type="text"],
 #scan-view select {
-    padding: 12px 14px;
-    font-size: 14px;
+    padding: 10px 12px;
+    font-size: 13px;
+}
+
+#scan-view .quick-setup-card input[type="number"],
+#scan-view .quick-setup-card select {
+    height: 34px;
+    padding: 6px 10px;
+    font-size: 12px;
+}
+
+#scan-view .quick-setup-card .control-group label {
+    margin-bottom: 4px;
 }
 
 #scan-view .toggle-card {
-    padding: 14px 16px;
+    padding: 12px 14px;
 }
 
 #scan-view .toggle-switch {
-    width: 36px;
-    height: 20px;
+    width: 34px;
+    height: 19px;
 }
 
 #scan-view .toggle-switch::after {
-    width: 16px;
-    height: 16px;
+    width: 15px;
+    height: 15px;
 }
 
 #scan-view .toggle-card input:checked ~ .toggle-switch::after {
-    transform: translateX(16px);
+    transform: translateX(15px);
 }
 
 #scan-view .dashboard-open-btn {
-    width: 34px;
-    height: 30px;
+    width: 32px;
+    height: 28px;
 }
 
 #scan-view .quick-run-btn {
-    min-width: 148px;
+    min-width: 150px;
     height: 36px;
-    font-size: 14px;
+    font-size: 13px;
+}
+
+#scan-view .quick-setup-card {
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+}
+
+#scan-view .quick-setup-card .info-icon {
+    width: 12px;
+    height: 12px;
+    font-size: 0;
+    margin-left: 5px;
+}
+
+#scan-view .quick-setup-card .info-icon::before {
+    font-size: 8px;
+}
+
+#scan-view .quick-setup-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+#scan-view .quick-setup-header h3 {
+    margin: 0;
+}
+
+#scan-view .quick-setup-block {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 7px;
+    margin-bottom: 6px;
+    background: rgba(0, 0, 0, 0.2);
+}
+
+#scan-view .quick-setup-block:last-child {
+    margin-bottom: 0;
+}
+
+#scan-view .quick-setup-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+}
+
+#scan-view .quick-setup-grid .control-group {
+    margin-bottom: 0;
+}
+
+#scan-view .quick-setup-grid-span-2 {
+    grid-column: 1 / -1;
+}
+
+#scan-view .quick-setup-switch-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+}
+
+#scan-view .quick-setup-switch-grid .toggle-card {
+    padding: 8px 10px;
+    min-height: 42px;
+    align-items: center;
+}
+
+#scan-view .quick-setup-switch-grid .toggle-content {
+    min-width: 0;
+}
+
+#scan-view .quick-setup-switch-grid .toggle-title {
+    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    line-height: 1.2;
+    white-space: normal;
+}
+
+#scan-view .quick-setup-switch-grid .toggle-desc {
+    display: none;
+}
+
+#scan-view .quick-setup-grid-compact .control-group label {
+    margin-bottom: 6px;
+}
+
+#scan-view .quick-setup-help {
+    margin-top: auto;
+    border: 1px dashed rgba(0, 243, 255, 0.25);
+    border-radius: 8px;
+    padding: 8px 10px;
+    background: rgba(0, 243, 255, 0.04);
+}
+
+#scan-view .quick-setup-help-title {
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #9beeff;
+    margin-bottom: 6px;
+    font-family: var(--font-mono);
+}
+
+#scan-view .quick-setup-help ul {
+    margin: 0;
+    padding-left: 15px;
+    display: grid;
+    gap: 4px;
+}
+
+#scan-view .quick-setup-help li {
+    font-size: 11px;
+    color: #b6c4cf;
+    line-height: 1.35;
+}
+
+#scan-view .scan-footer-info {
+    margin-top: 10px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+#scan-view .scan-footer-card {
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.02);
+    padding: 12px;
+}
+
+#scan-view .scan-footer-card h3 {
+    margin: 0 0 8px;
+    font-size: 12px;
+    font-family: var(--font-mono);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #c7f7ff;
+}
+
+#scan-view .scan-footer-card p {
+    margin: 0 0 8px;
+    font-size: 12px;
+    color: #aeb9c4;
+    line-height: 1.45;
+}
+
+#scan-view .scan-footer-card ul {
+    margin: 0;
+    padding-left: 16px;
+    display: grid;
+    gap: 4px;
+}
+
+#scan-view .scan-footer-card li {
+    font-size: 11px;
+    color: #9fb0bd;
+    line-height: 1.35;
+}
+
+#scan-view .scan-footer-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+#scan-view .scan-footer-link {
+    width: auto;
+    height: 30px;
+    padding: 0 12px;
+    text-decoration: none;
+    font-size: 11px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+#scan-view .scan-footer-link svg {
+    flex: 0 0 auto;
+}
+
+#scan-view .scan-footer-link.secondary {
+    background: rgba(0, 243, 255, 0.08);
+    border: 1px solid rgba(0, 243, 255, 0.35);
+    color: #9befff;
+}
+
+#scan-view .scan-footer-meta {
+    margin-top: 8px;
+    font-size: 11px;
+    color: #8ea1af;
 }
 
 @media (max-width: 1200px) {
     #scan-view {
-        padding: 30px;
+        padding: 24px;
     }
 
     #scan-view .dashboard-shell {
@@ -1461,17 +1840,38 @@ output {
 
 @media (max-width: 700px) {
     #scan-view {
-        padding: 20px;
+        padding: 16px;
     }
 
     #scan-view .metric-value {
-        font-size: 20px;
+        font-size: 21px;
     }
 
     #scan-view input[type="number"],
     #scan-view input[type="text"],
     #scan-view select {
-        font-size: 13px;
+        font-size: 12px;
+    }
+
+    #scan-view .quick-setup-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    #scan-view .quick-setup-grid {
+        grid-template-columns: 1fr;
+    }
+
+    #scan-view .quick-setup-switch-grid {
+        grid-template-columns: 1fr;
+    }
+
+    #scan-view .quick-setup-grid-span-2 {
+        grid-column: auto;
+    }
+
+    #scan-view .scan-footer-info {
+        grid-template-columns: 1fr;
     }
 }
 
@@ -1519,7 +1919,7 @@ output {
     }
 }
 
-@media (min-width: 1600px) {
+@media (min-width: 1600px) and (min-height: 900px) {
     :root {
         --sidebar-width: 252px;
     }
@@ -1547,11 +1947,11 @@ output {
     }
 
     .config-area {
-        padding: 50px;
+        padding: 56px;
     }
 
     .panel-header {
-        padding: 18px 24px;
+        padding: 21px 28px;
     }
 
     .panel-icon {
@@ -1559,37 +1959,37 @@ output {
     }
 
     .panel-header h2 {
-        font-size: 16px;
+        font-size: 18px;
     }
 
     .panel-body {
-        padding: 24px;
+        padding: 28px;
     }
 
     .control-group label {
-        font-size: 13px;
+        font-size: 14px;
     }
 
     input[type="number"],
     input[type="text"],
     select {
-        padding: 12px 14px;
-        font-size: 14px;
+        padding: 14px 16px;
+        font-size: 16px;
     }
 
     .action-btn {
-        height: 34px;
-        padding: 0 14px;
-        font-size: 12px;
+        height: 38px;
+        padding: 0 16px;
+        font-size: 14px;
         border-radius: 4px;
     }
 
     #scan-view {
-        padding: 52px;
+        padding: 58px;
     }
 
     #scan-view .panel-body {
-        padding: 26px;
+        padding: 30px;
     }
 
     #scan-view .metric-label {
@@ -1597,7 +1997,7 @@ output {
     }
 
     #scan-view .metric-value {
-        font-size: 24px;
+        font-size: 28px;
     }
 
     #scan-view .metric-card p,
@@ -1610,29 +2010,29 @@ output {
     #scan-view .progress-top h3,
     #scan-view .recent-title,
     #scan-view .toggle-title {
-        font-size: 14px;
+        font-size: 16px;
     }
 
     #scan-view .chart-head span,
     #scan-view .progress-meta,
     #scan-view .control-group label {
-        font-size: 12px;
+        font-size: 13px;
     }
 
     #scan-view .progress-note {
-        font-size: 13px;
+        font-size: 14px;
     }
 
     #scan-view input[type="number"],
     #scan-view input[type="text"],
     #scan-view select {
-        padding: 13px 15px;
-        font-size: 15px;
+        padding: 14px 16px;
+        font-size: 16px;
     }
 
     #scan-view .quick-run-btn {
-        min-width: 164px;
-        height: 40px;
-        font-size: 15px;
+        min-width: 176px;
+        height: 44px;
+        font-size: 16px;
     }
 }

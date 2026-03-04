@@ -5,6 +5,7 @@ CRUD operations for scan sessions and results.
 """
 
 import json
+from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional, Set, Tuple
 from pathlib import Path
 
@@ -15,8 +16,11 @@ from wp_hunter.models import ScanConfig, PluginResult, ScanStatus
 class ScanRepository:
     """Repository for scan session and result operations."""
 
+    _catalog_backfill_attempted = False
+
     def __init__(self, db_path: Optional[Path] = None):
         self.db_path = db_path
+        self._session_created_at_cache: Dict[int, str] = {}
         init_db(db_path)
 
         # Migration: Add is_duplicate column if missing
@@ -84,6 +88,247 @@ class ScanRepository:
 
         except Exception as e:
             print(f"Database migration warning: {e}")
+
+        if not ScanRepository._catalog_backfill_attempted:
+            ScanRepository._catalog_backfill_attempted = True
+            try:
+                self._maybe_backfill_catalog()
+            except Exception:
+                pass
+
+    def _get_session_created_at(self, cursor: Any, session_id: int) -> str:
+        cached = self._session_created_at_cache.get(session_id)
+        if cached:
+            return cached
+
+        cursor.execute("SELECT created_at FROM scan_sessions WHERE id = ?", (session_id,))
+        row = cursor.fetchone()
+        created_at = row["created_at"] if row and row["created_at"] else ""
+        self._session_created_at_cache[session_id] = created_at
+        return created_at
+
+    def _upsert_catalog_entry(
+        self,
+        cursor: Any,
+        session_id: int,
+        session_created_at: str,
+        result: PluginResult,
+    ) -> None:
+        slug = result.slug
+        is_theme = 1 if result.is_theme else 0
+
+        cursor.execute(
+            """
+            SELECT id, seen_count, max_score_ever, first_seen_session_id, first_seen_at
+            FROM plugin_catalog
+            WHERE slug = ?
+            ORDER BY id ASC
+            LIMIT 1
+            """,
+            (slug,),
+        )
+        existing = cursor.fetchone()
+
+        if existing:
+            catalog_id = existing["id"]
+            previous_seen_count = int(existing["seen_count"] or 0)
+            max_score_ever = max(int(existing["max_score_ever"] or 0), int(result.score or 0))
+
+            cursor.execute(
+                """
+                INSERT OR IGNORE INTO plugin_catalog_sessions (
+                    catalog_id, session_id, seen_at, score_snapshot, version_snapshot,
+                    installations_snapshot, days_since_update_snapshot, semgrep_findings_snapshot
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    catalog_id,
+                    session_id,
+                    session_created_at,
+                    int(result.score or 0),
+                    result.version,
+                    int(result.installations or 0),
+                    int(result.days_since_update or 0),
+                    None,
+                ),
+            )
+            seen_increment = 1 if cursor.rowcount > 0 else 0
+
+            cursor.execute(
+                """
+                UPDATE plugin_catalog
+                SET last_seen_session_id = ?,
+                    last_seen_at = ?,
+                    seen_count = ?,
+                    latest_version = ?,
+                    latest_score = ?,
+                    max_score_ever = ?,
+                    latest_installations = ?,
+                    latest_days_since_update = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (
+                    session_id,
+                    session_created_at,
+                    previous_seen_count + seen_increment,
+                    result.version,
+                    int(result.score or 0),
+                    max_score_ever,
+                    int(result.installations or 0),
+                    int(result.days_since_update or 0),
+                    catalog_id,
+                ),
+            )
+            return
+
+        cursor.execute(
+            """
+            INSERT INTO plugin_catalog (
+                slug, is_theme,
+                first_seen_session_id, last_seen_session_id,
+                first_seen_at, last_seen_at,
+                seen_count,
+                latest_version, latest_score, max_score_ever,
+                latest_installations, latest_days_since_update,
+                latest_semgrep_findings
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                slug,
+                is_theme,
+                session_id,
+                session_id,
+                session_created_at,
+                session_created_at,
+                1,
+                result.version,
+                int(result.score or 0),
+                int(result.score or 0),
+                int(result.installations or 0),
+                int(result.days_since_update or 0),
+                None,
+            ),
+        )
+        catalog_id = cursor.lastrowid
+
+        cursor.execute(
+            """
+            INSERT OR IGNORE INTO plugin_catalog_sessions (
+                catalog_id, session_id, seen_at, score_snapshot, version_snapshot,
+                installations_snapshot, days_since_update_snapshot, semgrep_findings_snapshot
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                catalog_id,
+                session_id,
+                session_created_at,
+                int(result.score or 0),
+                result.version,
+                int(result.installations or 0),
+                int(result.days_since_update or 0),
+                None,
+            ),
+        )
+
+    def _refresh_catalog_entry(self, cursor: Any, catalog_id: int) -> None:
+        cursor.execute(
+            """
+            SELECT COUNT(*) AS c, MIN(seen_at) AS first_seen, MAX(seen_at) AS last_seen
+            FROM plugin_catalog_sessions
+            WHERE catalog_id = ?
+            """,
+            (catalog_id,),
+        )
+        stats = cursor.fetchone()
+        link_count = int((stats["c"] if stats else 0) or 0)
+
+        if link_count <= 0:
+            cursor.execute("DELETE FROM plugin_catalog WHERE id = ?", (catalog_id,))
+            return
+
+        cursor.execute(
+            """
+            SELECT session_id, score_snapshot, version_snapshot,
+                   installations_snapshot, days_since_update_snapshot
+            FROM plugin_catalog_sessions
+            WHERE catalog_id = ?
+            ORDER BY seen_at ASC, id ASC
+            LIMIT 1
+            """,
+            (catalog_id,),
+        )
+        first_row = cursor.fetchone()
+
+        cursor.execute(
+            """
+            SELECT session_id, score_snapshot, version_snapshot,
+                   installations_snapshot, days_since_update_snapshot
+            FROM plugin_catalog_sessions
+            WHERE catalog_id = ?
+            ORDER BY seen_at DESC, id DESC
+            LIMIT 1
+            """,
+            (catalog_id,),
+        )
+        last_row = cursor.fetchone()
+
+        cursor.execute(
+            """
+            SELECT MAX(COALESCE(score_snapshot, 0)) AS max_score
+            FROM plugin_catalog_sessions
+            WHERE catalog_id = ?
+            """,
+            (catalog_id,),
+        )
+        max_row = cursor.fetchone()
+        max_score = int((max_row["max_score"] if max_row else 0) or 0)
+
+        cursor.execute(
+            """
+            UPDATE plugin_catalog
+            SET first_seen_session_id = ?,
+                last_seen_session_id = ?,
+                first_seen_at = ?,
+                last_seen_at = ?,
+                seen_count = ?,
+                latest_version = ?,
+                latest_score = ?,
+                max_score_ever = ?,
+                latest_installations = ?,
+                latest_days_since_update = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (
+                first_row["session_id"] if first_row else None,
+                last_row["session_id"] if last_row else None,
+                stats["first_seen"],
+                stats["last_seen"],
+                link_count,
+                last_row["version_snapshot"] if last_row else None,
+                int((last_row["score_snapshot"] if last_row else 0) or 0),
+                max_score,
+                int((last_row["installations_snapshot"] if last_row else 0) or 0),
+                int((last_row["days_since_update_snapshot"] if last_row else 0) or 0),
+                catalog_id,
+            ),
+        )
+
+    def _maybe_backfill_catalog(self) -> None:
+        with get_db(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) AS c FROM plugin_catalog")
+            catalog_count = int((cursor.fetchone() or {"c": 0})["c"])
+            if catalog_count > 0:
+                return
+
+            cursor.execute("SELECT COUNT(*) AS c FROM scan_results")
+            results_count = int((cursor.fetchone() or {"c": 0})["c"])
+            if results_count == 0:
+                return
+
+        self.rebuild_plugin_catalog(reset=True)
 
     def create_session(self, config: ScanConfig) -> int:
         """Create a new scan session and return its ID."""
@@ -207,8 +452,13 @@ class ScanRepository:
                     code_analysis_json,
                 ),
             )
+            inserted_id = cursor.lastrowid or 0
+
+            session_created_at = self._get_session_created_at(cursor, session_id)
+            self._upsert_catalog_entry(cursor, session_id, session_created_at, result)
+
             conn.commit()
-            return cursor.lastrowid or 0
+            return inserted_id
 
     def get_session(self, session_id: int) -> Optional[Dict[str, Any]]:
         """Get a scan session by ID."""
@@ -274,6 +524,19 @@ class ScanRepository:
 
             sessions: List[Dict[str, Any]] = []
             seen_signatures: Set[Tuple[bool, Tuple[str, ...]]] = set()
+            signature_counts: Dict[Tuple[bool, Tuple[str, ...]], int] = {}
+
+            for row in rows:
+                sid = row["id"]
+                slug_signature = tuple(sorted(slugs_by_session.get(sid, set())))
+                has_results = len(slug_signature) > 0
+                signature = (has_results, slug_signature)
+                if (
+                    row["status"]
+                    in {ScanStatus.COMPLETED.value, ScanStatus.MERGED.value}
+                    and has_results
+                ):
+                    signature_counts[signature] = signature_counts.get(signature, 0) + 1
 
             for row in rows:
                 sid = row["id"]
@@ -283,16 +546,31 @@ class ScanRepository:
 
                 # Only deduplicate completed sessions with actual results.
                 # Keep all failed/running/empty-result sessions visible.
-                if row["status"] == ScanStatus.COMPLETED.value and has_results:
+                if (
+                    row["status"]
+                    in {ScanStatus.COMPLETED.value, ScanStatus.MERGED.value}
+                    and has_results
+                ):
                     if signature in seen_signatures:
                         continue
                     seen_signatures.add(signature)
+
+                status_value = row["status"]
+                is_merged = status_value == ScanStatus.MERGED.value or (
+                    status_value
+                    in {ScanStatus.COMPLETED.value, ScanStatus.MERGED.value}
+                    and has_results
+                    and signature_counts.get(signature, 0) > 1
+                )
+                if is_merged:
+                    status_value = ScanStatus.MERGED.value
 
                 sessions.append(
                     {
                         "id": sid,
                         "created_at": row["created_at"],
-                        "status": row["status"],
+                        "status": status_value,
+                        "is_merged": is_merged,
                         "config": json.loads(row["config_json"])
                         if row["config_json"]
                         else None,
@@ -399,16 +677,30 @@ class ScanRepository:
         with get_db(self.db_path) as conn:
             cursor = conn.cursor()
 
-            # Delete results first (foreign key)
+            cursor.execute(
+                "SELECT catalog_id FROM plugin_catalog_sessions WHERE session_id = ?",
+                (session_id,),
+            )
+            affected_catalog_ids = [int(row["catalog_id"]) for row in cursor.fetchall()]
+
+            cursor.execute(
+                "DELETE FROM plugin_catalog_sessions WHERE session_id = ?", (session_id,)
+            )
+
+            # Delete results first
             cursor.execute(
                 "DELETE FROM scan_results WHERE session_id = ?", (session_id,)
             )
 
             # Delete session
             cursor.execute("DELETE FROM scan_sessions WHERE id = ?", (session_id,))
+            session_deleted = cursor.rowcount > 0
+
+            for catalog_id in set(affected_catalog_ids):
+                self._refresh_catalog_entry(cursor, catalog_id)
 
             conn.commit()
-            return cursor.rowcount > 0
+            return session_deleted
 
     def get_latest_session_by_config(
         self, config_dict: Dict[str, Any], exclude_id: int
@@ -421,7 +713,7 @@ class ScanRepository:
             cursor.execute(
                 """
                 SELECT id, config_json FROM scan_sessions 
-                WHERE status = 'completed' AND id != ?
+                WHERE status IN ('completed', 'merged') AND id != ?
                 ORDER BY id DESC LIMIT 20
             """,
                 (exclude_id,),
@@ -452,6 +744,19 @@ class ScanRepository:
             cursor.execute(
                 "UPDATE scan_sessions SET created_at = CURRENT_TIMESTAMP WHERE id = ?",
                 (session_id,),
+            )
+            conn.commit()
+
+    def mark_session_merged(self, session_id: int) -> None:
+        with get_db(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE scan_sessions
+                SET status = ?, created_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """,
+                (ScanStatus.MERGED.value, session_id),
             )
             conn.commit()
 
@@ -563,6 +868,292 @@ class ScanRepository:
                 results.append(d)
             return results
 
+    _VALID_CATALOG_SORT_COLUMNS = {
+        "last_seen": "pc.last_seen_at",
+        "seen_count": "pc.seen_count",
+        "max_score": "pc.max_score_ever",
+        "latest_score": "pc.latest_score",
+        "installs": "pc.latest_installations",
+        "updated_days": "pc.latest_days_since_update",
+        "slug": "pc.slug",
+    }
+
+    def get_catalog_plugins(
+        self,
+        q: str = "",
+        sort_by: str = "last_seen",
+        order: str = "desc",
+        limit: int = 100,
+        offset: int = 0,
+        include_sessions: bool = False,
+    ) -> Dict[str, Any]:
+        try:
+            self._maybe_backfill_catalog()
+        except Exception:
+            pass
+
+        safe_sort_column = self._VALID_CATALOG_SORT_COLUMNS.get(sort_by, "pc.last_seen_at")
+        safe_order = "DESC" if str(order or "").upper() == "DESC" else "ASC"
+        safe_limit = max(1, min(int(limit or 100), 1000))
+        safe_offset = max(0, int(offset or 0))
+        query_text = str(q or "").strip().lower()
+
+        with get_db(self.db_path) as conn:
+            cursor = conn.cursor()
+            where_clause = ""
+            params: List[Any] = []
+            if query_text:
+                where_clause = "WHERE LOWER(pc.slug) LIKE ?"
+                params.append(f"%{query_text}%")
+
+            cursor.execute(
+                f"""
+                SELECT COUNT(*) AS c
+                FROM plugin_catalog pc
+                {where_clause}
+                """,
+                params,
+            )
+            total = int((cursor.fetchone() or {"c": 0})["c"])
+
+            cursor.execute(
+                f"""
+                SELECT
+                    pc.id,
+                    pc.slug,
+                    pc.is_theme,
+                    pc.first_seen_session_id,
+                    pc.last_seen_session_id,
+                    pc.first_seen_at,
+                    pc.last_seen_at,
+                    pc.seen_count,
+                    pc.latest_version,
+                    pc.latest_score,
+                    pc.max_score_ever,
+                    pc.latest_installations,
+                    pc.latest_days_since_update,
+                    pc.latest_semgrep_findings,
+                    pc.created_at,
+                    pc.updated_at
+                FROM plugin_catalog pc
+                {where_clause}
+                ORDER BY {safe_sort_column} {safe_order}
+                LIMIT ? OFFSET ?
+                """,
+                params + [safe_limit, safe_offset],
+            )
+
+            rows = [dict(r) for r in cursor.fetchall()]
+
+            if rows:
+                slugs = [str(item.get("slug") or "") for item in rows if item.get("slug")]
+                semgrep_statuses = self.get_semgrep_statuses_for_slugs(slugs)
+                for item in rows:
+                    semgrep = semgrep_statuses.get(str(item.get("slug") or ""))
+                    item["semgrep"] = semgrep
+                    if semgrep:
+                        item["latest_semgrep_findings"] = int(
+                            semgrep.get("findings_count") or 0
+                        )
+
+            if include_sessions and rows:
+                catalog_ids = [int(r["id"]) for r in rows]
+                placeholders = ",".join(["?"] * len(catalog_ids))
+                cursor.execute(
+                    f"""
+                    SELECT catalog_id, session_id, seen_at
+                    FROM plugin_catalog_sessions
+                    WHERE catalog_id IN ({placeholders})
+                    ORDER BY seen_at DESC
+                    """,
+                    catalog_ids,
+                )
+                sessions_by_catalog: Dict[int, List[Dict[str, Any]]] = {}
+                for row in cursor.fetchall():
+                    cid = int(row["catalog_id"])
+                    sessions_by_catalog.setdefault(cid, []).append(
+                        {
+                            "session_id": row["session_id"],
+                            "seen_at": row["seen_at"],
+                        }
+                    )
+                for item in rows:
+                    item["sessions"] = sessions_by_catalog.get(int(item["id"]), [])
+
+            now_utc = datetime.now(timezone.utc)
+
+            def _elapsed_days_since(ts: Any) -> int:
+                if not ts:
+                    return 0
+                try:
+                    normalized = str(ts).replace("Z", "+00:00")
+                    dt = datetime.fromisoformat(normalized)
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    delta = now_utc - dt.astimezone(timezone.utc)
+                    return max(0, int(delta.total_seconds() // 86400))
+                except Exception:
+                    return 0
+
+            for item in rows:
+                item["is_theme"] = bool(item.get("is_theme"))
+                base_days = item.get("latest_days_since_update")
+                if base_days is None:
+                    continue
+                try:
+                    base_days_int = max(0, int(base_days))
+                except Exception:
+                    base_days_int = 0
+
+                dynamic_days = base_days_int + _elapsed_days_since(item.get("last_seen_at"))
+                item["latest_days_since_update_snapshot"] = base_days_int
+                item["latest_days_since_update"] = dynamic_days
+
+            return {
+                "total": total,
+                "limit": safe_limit,
+                "offset": safe_offset,
+                "items": rows,
+            }
+
+    def rebuild_plugin_catalog(self, reset: bool = False) -> Dict[str, Any]:
+        rebuilt = 0
+        linked = 0
+
+        with get_db(self.db_path) as conn:
+            cursor = conn.cursor()
+            if reset:
+                cursor.execute("DELETE FROM plugin_catalog_sessions")
+                cursor.execute("DELETE FROM plugin_catalog")
+
+            cursor.execute(
+                """
+                SELECT
+                    sr.session_id,
+                    ss.created_at AS session_created_at,
+                    sr.slug,
+                    sr.name,
+                    sr.version,
+                    sr.score,
+                    sr.installations,
+                    sr.days_since_update,
+                    sr.tested_wp_version,
+                    sr.author_trusted,
+                    sr.is_risky_category,
+                    sr.is_user_facing,
+                    sr.is_theme,
+                    sr.risk_tags,
+                    sr.security_flags,
+                    sr.feature_flags,
+                    sr.download_link,
+                    sr.wp_org_link,
+                    sr.cve_search_link,
+                    sr.wpscan_link,
+                    sr.patchstack_link,
+                    sr.wordfence_link,
+                    sr.google_dork_link,
+                    sr.trac_link
+                FROM scan_results sr
+                INNER JOIN scan_sessions ss ON ss.id = sr.session_id
+                ORDER BY ss.created_at ASC, sr.id ASC
+                """
+            )
+
+            for row in cursor.fetchall():
+                result = PluginResult(
+                    slug=row["slug"] or "",
+                    name=row["name"] or "",
+                    version=row["version"] or "",
+                    score=int(row["score"] or 0),
+                    installations=int(row["installations"] or 0),
+                    days_since_update=int(row["days_since_update"] or 0),
+                    tested_wp_version=row["tested_wp_version"] or "",
+                    author_trusted=bool(row["author_trusted"]),
+                    is_risky_category=bool(row["is_risky_category"]),
+                    is_user_facing=bool(row["is_user_facing"]),
+                    is_theme=bool(row["is_theme"]),
+                    risk_tags=(row["risk_tags"].split(",") if row["risk_tags"] else []),
+                    security_flags=(
+                        row["security_flags"].split(",") if row["security_flags"] else []
+                    ),
+                    feature_flags=(
+                        row["feature_flags"].split(",") if row["feature_flags"] else []
+                    ),
+                    download_link=row["download_link"] or "",
+                    wp_org_link=row["wp_org_link"] or "",
+                    cve_search_link=row["cve_search_link"] or "",
+                    wpscan_link=row["wpscan_link"] or "",
+                    patchstack_link=row["patchstack_link"] or "",
+                    wordfence_link=row["wordfence_link"] or "",
+                    google_dork_link=row["google_dork_link"] or "",
+                    trac_link=row["trac_link"] or "",
+                )
+
+                before_changes = conn.total_changes
+                self._upsert_catalog_entry(
+                    cursor,
+                    int(row["session_id"]),
+                    row["session_created_at"] or "",
+                    result,
+                )
+                after_changes = conn.total_changes
+                if after_changes > before_changes:
+                    rebuilt += 1
+                    linked += 1
+
+            conn.commit()
+
+        with get_db(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) AS c FROM plugin_catalog")
+            catalog_count = int((cursor.fetchone() or {"c": 0})["c"])
+            cursor.execute("SELECT COUNT(*) AS c FROM plugin_catalog_sessions")
+            link_count = int((cursor.fetchone() or {"c": 0})["c"])
+
+        return {
+            "status": "ok",
+            "catalog_count": catalog_count,
+            "link_count": link_count,
+            "processed_rows": rebuilt,
+            "linked_rows": linked,
+        }
+
+    def get_catalog_plugin_sessions(
+        self, slug: str, is_theme: Optional[bool] = None, limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        safe_limit = max(1, min(int(limit or 50), 500))
+        with get_db(self.db_path) as conn:
+            cursor = conn.cursor()
+
+            where = "WHERE pc.slug = ?"
+            params: List[Any] = [slug]
+            if is_theme is not None:
+                where += " AND pc.is_theme = ?"
+                params.append(1 if is_theme else 0)
+
+            cursor.execute(
+                f"""
+                SELECT
+                    pcs.session_id,
+                    pcs.seen_at,
+                    pcs.score_snapshot,
+                    pcs.version_snapshot,
+                    pcs.installations_snapshot,
+                    pcs.days_since_update_snapshot,
+                    ss.status,
+                    ss.total_found,
+                    ss.high_risk_count
+                FROM plugin_catalog pc
+                INNER JOIN plugin_catalog_sessions pcs ON pcs.catalog_id = pc.id
+                INNER JOIN scan_sessions ss ON ss.id = pcs.session_id
+                {where}
+                ORDER BY pcs.seen_at DESC
+                LIMIT ?
+                """,
+                params + [safe_limit],
+            )
+            return [dict(row) for row in cursor.fetchall()]
+
     def create_semgrep_scan(self, slug: str, version: Optional[str] = None) -> int:
         """Create a new Semgrep scan record."""
         with get_db(self.db_path) as conn:
@@ -669,50 +1260,80 @@ class ScanRepository:
             return scan
 
     def get_semgrep_stats_for_slugs(self, slugs: List[str]) -> Dict[str, Any]:
-        """Aggregate Semgrep statistics for a list of plugin slugs."""
+        """Aggregate Semgrep statistics for a list of plugin slugs using each slug's latest scan."""
         if not slugs:
-            return {"total_findings": 0, "breakdown": {}, "scanned_count": 0}
+            return {
+                "total_findings": 0,
+                "breakdown": {},
+                "scanned_count": 0,
+                "running_count": 0,
+                "pending_count": 0,
+                "failed_count": 0,
+                "completed_count": 0,
+            }
 
         placeholders = ",".join(["?"] * len(slugs))
         with get_db(self.db_path) as conn:
             cursor = conn.cursor()
 
-            # Get latest scan ID for each slug
             cursor.execute(
                 f"""
-                SELECT slug, MAX(id) as max_id
-                FROM semgrep_scans
-                WHERE slug IN ({placeholders}) AND status = 'completed'
-                GROUP BY slug
+                SELECT s.slug, s.status, s.summary_json
+                FROM semgrep_scans s
+                INNER JOIN (
+                    SELECT slug, MAX(id) AS max_id
+                    FROM semgrep_scans
+                    WHERE slug IN ({placeholders})
+                    GROUP BY slug
+                ) latest ON s.id = latest.max_id
             """,
                 slugs,
             )
 
-            latest_scan_ids = [row["max_id"] for row in cursor.fetchall()]
+            rows = cursor.fetchall()
+            if not rows:
+                return {
+                    "total_findings": 0,
+                    "breakdown": {},
+                    "scanned_count": 0,
+                    "running_count": 0,
+                    "pending_count": 0,
+                    "failed_count": 0,
+                    "completed_count": 0,
+                }
 
-            if not latest_scan_ids:
-                return {"total_findings": 0, "breakdown": {}, "scanned_count": 0}
+            breakdown: Dict[str, int] = {}
+            completed_count = 0
+            failed_count = 0
+            pending_count = 0
+            running_count = 0
 
-            placeholders_ids = ",".join(["?"] * len(latest_scan_ids))
+            for row in rows:
+                status = str(row["status"] or "").lower()
+                if status == "completed":
+                    completed_count += 1
+                    summary = json.loads(row["summary_json"]) if row["summary_json"] else {}
+                    row_breakdown = summary.get("breakdown", {}) if isinstance(summary, dict) else {}
+                    for sev, count in (row_breakdown or {}).items():
+                        breakdown[str(sev)] = int(breakdown.get(str(sev), 0)) + int(count or 0)
+                elif status == "failed":
+                    failed_count += 1
+                elif status == "running":
+                    running_count += 1
+                else:
+                    pending_count += 1
 
-            # Aggregate findings
-            cursor.execute(
-                f"""
-                SELECT severity, COUNT(*) as count
-                FROM semgrep_findings
-                WHERE scan_id IN ({placeholders_ids})
-                GROUP BY severity
-            """,
-                latest_scan_ids,
-            )
-
-            breakdown = {row["severity"]: row["count"] for row in cursor.fetchall()}
-            total_findings = sum(breakdown.values())
+            total_findings = sum(int(v or 0) for v in breakdown.values())
+            scanned_count = completed_count + failed_count
 
             return {
                 "total_findings": total_findings,
                 "breakdown": breakdown,
-                "scanned_count": len(latest_scan_ids),
+                "scanned_count": scanned_count,
+                "running_count": running_count,
+                "pending_count": pending_count,
+                "failed_count": failed_count,
+                "completed_count": completed_count,
             }
 
     def get_semgrep_statuses_for_slugs(

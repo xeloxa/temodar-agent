@@ -149,6 +149,72 @@ def init_db(db_path: Optional[Path] = None) -> None:
         )
     """)
 
+    # Create plugin_catalog table (global store across all scans)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS plugin_catalog (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            slug TEXT NOT NULL,
+            is_theme INTEGER NOT NULL DEFAULT 0,
+            first_seen_session_id INTEGER,
+            last_seen_session_id INTEGER,
+            first_seen_at TEXT,
+            last_seen_at TEXT,
+            seen_count INTEGER NOT NULL DEFAULT 0,
+            latest_version TEXT,
+            latest_score INTEGER NOT NULL DEFAULT 0,
+            max_score_ever INTEGER NOT NULL DEFAULT 0,
+            latest_installations INTEGER NOT NULL DEFAULT 0,
+            latest_days_since_update INTEGER,
+            latest_semgrep_findings INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(slug, is_theme)
+        )
+    """)
+
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_plugin_catalog_last_seen
+        ON plugin_catalog(last_seen_at DESC)
+    """)
+
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_plugin_catalog_seen_count
+        ON plugin_catalog(seen_count DESC)
+    """)
+
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_plugin_catalog_max_score
+        ON plugin_catalog(max_score_ever DESC)
+    """)
+
+    # Create plugin_catalog_sessions table (plugin <-> scan session link)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS plugin_catalog_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            catalog_id INTEGER NOT NULL,
+            session_id INTEGER NOT NULL,
+            seen_at TEXT NOT NULL,
+            score_snapshot INTEGER,
+            version_snapshot TEXT,
+            installations_snapshot INTEGER,
+            days_since_update_snapshot INTEGER,
+            semgrep_findings_snapshot INTEGER,
+            UNIQUE(catalog_id, session_id),
+            FOREIGN KEY (catalog_id) REFERENCES plugin_catalog(id) ON DELETE CASCADE,
+            FOREIGN KEY (session_id) REFERENCES scan_sessions(id) ON DELETE CASCADE
+        )
+    """)
+
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_catalog_sessions_session
+        ON plugin_catalog_sessions(session_id)
+    """)
+
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_catalog_sessions_catalog
+        ON plugin_catalog_sessions(catalog_id)
+    """)
+
     conn.commit()
     conn.close()
 

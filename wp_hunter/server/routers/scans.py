@@ -171,7 +171,7 @@ async def run_scan_task(session_id: int, config: ScanConfig, repo: ScanRepositor
             if current_slugs == prev_slugs:
                 # Identical results and config. Merge.
                 repo.delete_session(session_id)
-                repo.touch_session(prev_session_id)
+                repo.mark_session_merged(prev_session_id)
 
                 await manager.send_to_session(
                     session_id,
@@ -203,7 +203,7 @@ async def run_scan_task(session_id: int, config: ScanConfig, repo: ScanRepositor
 
 
 @router.get("")
-@limiter.limit("20/minute")
+@limiter.limit("10000/minute")
 async def list_scans(request: Request, limit: int = 50):
     """List all scan sessions."""
     sessions = repo.get_all_sessions(limit)
@@ -211,7 +211,7 @@ async def list_scans(request: Request, limit: int = 50):
 
 
 @router.post("")
-@limiter.limit("5/minute")
+@limiter.limit("5000/minute")
 async def create_scan(
     request: Request, scan_request: ScanRequest, background_tasks: BackgroundTasks
 ):

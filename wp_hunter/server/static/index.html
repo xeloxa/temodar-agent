@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="assets/css/style.css?v=2">
+    <link rel="stylesheet" href="assets/css/style.css?v=3">
     <style>
         .nav-menu {
             margin-top: 30px;
@@ -41,6 +41,174 @@
             color: var(--accent-primary);
             background: rgba(0, 255, 157, 0.1);
             font-weight: 700;
+        }
+        .view-header {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            align-items: center;
+            column-gap: 16px;
+            margin-bottom: 14px;
+            padding: 0 0 12px;
+            min-height: 38px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .view-header-title {
+            font-family: var(--font-mono);
+            font-size: 17px;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: #e8edf6;
+            line-height: 1;
+            white-space: nowrap;
+            padding-right: 14px;
+            border-right: 1px solid rgba(255, 255, 255, 0.16);
+        }
+        .view-header-desc {
+            font-family: var(--font-mono);
+            font-size: 13px;
+            color: #99a3af;
+            letter-spacing: 0.02em;
+            line-height: 1.4;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .view-header-with-actions {
+            grid-template-columns: auto 1fr auto;
+        }
+        .view-header-with-actions .details-bulk-buttons {
+            justify-self: end;
+        }
+        .details-bulk-buttons {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .details-toolbar-btn-secondary {
+            background: rgba(0, 243, 255, 0.1);
+            border: 1px solid var(--accent-blue);
+            color: var(--accent-blue);
+            height: 30px;
+            padding: 0 12px;
+            border-radius: 8px;
+            font-size: 11px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .semgrep-logo-icon {
+            width: 18px;
+            height: 12px;
+            display: inline-block;
+            background-color: currentColor;
+            -webkit-mask: url('assets/semgrep-mark.svg') center / contain no-repeat;
+            mask: url('assets/semgrep-mark.svg') center / contain no-repeat;
+            flex: 0 0 auto;
+        }
+        .semgrep-btn-label {
+            line-height: 1;
+        }
+        .details-dashboard {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 8px;
+            margin: 8px 0 10px;
+        }
+        .details-stat-card {
+            border: 1px solid var(--border-color);
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 10px;
+            padding: 8px 10px;
+            min-height: 56px;
+        }
+        .details-stat-label {
+            font-size: 10px;
+            color: #97a3af;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+        .details-stat-value {
+            font-size: 19px;
+            font-weight: 700;
+            color: #eaf2ff;
+            line-height: 1;
+            margin-bottom: 6px;
+        }
+        .details-stat-sub {
+            font-size: 10px;
+            color: #9ca9b6;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+        .details-stat-card-total .details-stat-label {
+            color: #8fb8d6;
+        }
+        .details-stat-card-progress .details-stat-label {
+            color: var(--accent-primary);
+        }
+        .details-stat-track {
+            width: 100%;
+            height: 5px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.08);
+            overflow: hidden;
+            display: flex;
+        }
+        .details-stat-fill {
+            height: 100%;
+            display: block;
+        }
+        .details-fill-primary { background: var(--accent-primary); }
+        .details-fill-blue { background: var(--accent-blue); }
+        .details-fill-high { background: #ff5f56; }
+        .details-fill-mid { background: #ffbd2e; }
+        .details-fill-low { background: #00f3ff; }
+        .details-fill-issue { background: #ff0055; }
+        .details-fill-clean { background: #00f3ff; }
+        .details-fill-wait { background: rgba(255,255,255,0.35); }
+        .details-fill-fail { background: #ff8a3c; }
+        .details-toolbar-btn-danger {
+            background: rgba(255, 0, 85, 0.1);
+            border: 1px solid #ff0055;
+            color: #ff0055;
+            height: 30px;
+            padding: 0 12px;
+            border-radius: 8px;
+            font-size: 11px;
+        }
+        @media (max-width: 900px) {
+            .view-header {
+                grid-template-columns: 1fr;
+                row-gap: 6px;
+                align-items: start;
+                min-height: 0;
+            }
+            .view-header-title {
+                border-right: none;
+                padding-right: 0;
+            }
+            .view-header-desc {
+                white-space: normal;
+                overflow: visible;
+                text-overflow: clip;
+            }
+
+            .details-dashboard {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 560px) {
+            .details-dashboard {
+                grid-template-columns: 1fr;
+            }
+        }
+        .panel-body {
+            padding-top: 16px;
+        }
+        #scan-view .panel-body {
+            padding-top: 16px;
         }
         .history-table {
             width: 100%;
@@ -102,6 +270,37 @@
         .history-table td.history-col-actions {
             width: 138px;
             white-space: nowrap;
+        }
+        .history-table th.details-col-slug,
+        .history-table td.details-col-slug { width: 24%; }
+        .history-table th.details-col-version,
+        .history-table td.details-col-version { width: 9%; white-space: nowrap; }
+        .history-table th.details-col-score,
+        .history-table td.details-col-score { width: 12%; }
+        .history-table th.details-col-updated,
+        .history-table td.details-col-updated { width: 10%; white-space: nowrap; }
+        .history-table th.details-col-installs,
+        .history-table td.details-col-installs { width: 15%; }
+        .history-table th.details-col-semgrep,
+        .history-table td.details-col-semgrep { width: 14%; }
+        .history-table th.details-col-actions,
+        .history-table td.details-col-actions { width: 16%; white-space: nowrap; }
+        .catalog-table th.details-col-slug,
+        .catalog-table td.details-col-slug { width: 20%; }
+        .catalog-table th.details-col-version,
+        .catalog-table td.details-col-version { width: 11%; }
+        .catalog-table th.details-col-score,
+        .catalog-table td.details-col-score { width: 13%; }
+        .catalog-table th.details-col-updated,
+        .catalog-table td.details-col-updated { width: 10%; }
+        .catalog-table th.details-col-installs,
+        .catalog-table td.details-col-installs { width: 16%; }
+        .catalog-table th.details-col-semgrep,
+        .catalog-table td.details-col-semgrep { width: 14%; }
+        .catalog-table th.details-col-actions,
+        .catalog-table td.details-col-actions { width: 16%; white-space: nowrap; }
+        .history-table td.details-col-semgrep .history-semgrep-cell {
+            max-width: 100%;
         }
         .history-table tbody tr.history-row {
             cursor: pointer;
@@ -409,6 +608,331 @@
         .history-risk-fill.high { background: #ff0055; }
         .history-risk-fill.medium { background: #ffbd2e; }
         .history-risk-fill.low { background: var(--accent-blue); }
+        .history-filters {
+            display: grid;
+            grid-template-columns: minmax(220px, 1fr) repeat(3, minmax(120px, 180px));
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+        .history-filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .history-filter-group label {
+            font-size: 10px;
+            letter-spacing: 0.08em;
+            color: #7c7c7c;
+            text-transform: uppercase;
+            font-family: var(--font-mono);
+        }
+        .history-filter-group input,
+        .history-filter-group select {
+            height: 32px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: rgba(255, 255, 255, 0.03);
+            color: #d6d6d6;
+            font-size: 12px;
+            font-family: var(--font-mono);
+            padding: 0 10px;
+        }
+        .history-filter-group input:focus,
+        .history-filter-group select:focus {
+            outline: none;
+            border-color: rgba(0, 243, 255, 0.42);
+            box-shadow: 0 0 0 1px rgba(0, 243, 255, 0.2);
+        }
+        .table-pagination {
+            margin-top: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .table-pagination-info {
+            font-family: var(--font-mono);
+            font-size: 10px;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #7e7e7e;
+        }
+        .table-pagination-controls {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .table-page-btn {
+            min-width: 68px;
+            height: 28px;
+            padding: 0 10px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            background: rgba(255, 255, 255, 0.03);
+            color: #cdd6de;
+            font-family: var(--font-mono);
+            font-size: 10px;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.18s ease;
+        }
+        .table-page-btn:hover:not(:disabled) {
+            border-color: rgba(0, 243, 255, 0.3);
+            color: var(--accent-blue);
+            background: rgba(0, 243, 255, 0.08);
+        }
+        .table-page-btn:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+        }
+        .table-page-current {
+            min-width: 84px;
+            text-align: center;
+            font-family: var(--font-mono);
+            font-size: 11px;
+            color: #b9c4cd;
+        }
+
+
+        .favorites-table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+        .favorites-table th,
+        .favorites-table td {
+            padding: 12px;
+            border-bottom: 1px solid #1a1a1a;
+            font-family: var(--font-mono);
+            font-size: 12px;
+        }
+        .favorites-table th {
+            color: var(--text-muted);
+            font-weight: normal;
+            text-align: left;
+        }
+        .favorites-table td {
+            color: var(--text-main);
+        }
+        .favorites-table th.favorites-col-slug,
+        .favorites-table td.favorites-col-slug { width: 210px; }
+        .favorites-table th.favorites-col-version,
+        .favorites-table td.favorites-col-version { width: 98px; }
+        .favorites-table th.favorites-col-slug,
+        .favorites-table td.favorites-col-slug { padding-right: 6px; }
+        .favorites-table th.favorites-col-version,
+        .favorites-table td.favorites-col-version { padding-left: 6px; }
+        .favorites-table th.favorites-col-installs,
+        .favorites-table td.favorites-col-installs { width: 150px; }
+        .favorites-table th.favorites-col-score,
+        .favorites-table td.favorites-col-score { width: 190px; }
+        .favorites-table th.favorites-col-updated,
+        .favorites-table td.favorites-col-updated { width: 130px; }
+        .favorites-table th.favorites-col-mode,
+        .favorites-table td.favorites-col-mode { width: 110px; }
+        .favorites-table th.favorites-col-actions,
+        .favorites-table td.favorites-col-actions { width: 126px; }
+
+        .favorites-row {
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+        .favorites-row:hover,
+        .favorites-row:focus-within {
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .favorites-slug {
+            color: #fff;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.01em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .favorites-version-chip {
+            display: inline-flex;
+            align-items: center;
+            min-width: 66px;
+            justify-content: center;
+            padding: 3px 8px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            background: rgba(255, 255, 255, 0.03);
+            color: #aeb7bf;
+            font-size: 9px;
+            letter-spacing: 0.05em;
+            line-height: 1;
+        }
+
+        .favorites-installs {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .favorites-installs-count {
+            min-width: 52px;
+            font-size: 12px;
+            color: #e9f9ff;
+        }
+        .favorites-installs-track {
+            width: 84px;
+            height: 6px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.08);
+            overflow: hidden;
+        }
+        .favorites-installs-fill {
+            display: block;
+            height: 100%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, rgba(0, 243, 255, 0.5), var(--accent-blue));
+        }
+
+        .favorites-score {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .favorites-score-pill {
+            min-width: 30px;
+            text-align: center;
+            padding: 3px 8px;
+            border-radius: 999px;
+            font-size: 10px;
+            font-weight: 700;
+            border: 1px solid transparent;
+        }
+        .favorites-score-pill.high {
+            color: #ff8eb7;
+            background: rgba(255, 0, 85, 0.12);
+            border-color: rgba(255, 0, 85, 0.32);
+        }
+        .favorites-score-pill.medium {
+            color: #ffd36b;
+            background: rgba(255, 189, 46, 0.12);
+            border-color: rgba(255, 189, 46, 0.3);
+        }
+        .favorites-score-pill.low {
+            color: #93f7ff;
+            background: rgba(0, 243, 255, 0.1);
+            border-color: rgba(0, 243, 255, 0.25);
+        }
+        .favorites-score-meter {
+            width: 88px;
+            height: 6px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.08);
+            overflow: hidden;
+        }
+        .favorites-score-fill {
+            display: block;
+            height: 100%;
+            border-radius: inherit;
+        }
+        .favorites-score-fill.high { background: #ff0055; }
+        .favorites-score-fill.medium { background: #ffbd2e; }
+        .favorites-score-fill.low { background: var(--accent-blue); }
+
+        .favorites-updated-chip {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 66px;
+            padding: 3px 8px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            background: rgba(255, 255, 255, 0.03);
+            color: #aeb7bf;
+            font-size: 9px;
+            letter-spacing: 0.05em;
+            line-height: 1;
+        }
+        .favorites-updated-chip.stale {
+            color: #ffbd2e;
+            border-color: rgba(255, 189, 46, 0.32);
+            background: rgba(255, 189, 46, 0.1);
+        }
+        .favorites-updated-chip.old {
+            color: #ff8eb7;
+            border-color: rgba(255, 0, 85, 0.32);
+            background: rgba(255, 0, 85, 0.1);
+        }
+
+        .favorites-actions {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            position: relative;
+            min-height: 24px;
+            padding-right: 30px;
+        }
+        .favorites-action-open {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 9px;
+            border-radius: 999px;
+            border: 1px solid rgba(0, 243, 255, 0.25);
+            background: rgba(0, 243, 255, 0.08);
+            color: rgba(0, 243, 255, 0.9);
+            font-size: 10px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            pointer-events: none;
+        }
+        .favorites-action-open svg {
+            width: 11px;
+            height: 11px;
+        }
+        .favorites-action-delete {
+            position: absolute;
+            right: 0;
+            top: 50%;
+            width: 22px;
+            height: 22px;
+            min-width: 0;
+            padding: 0;
+            border: none;
+            background: transparent;
+            color: rgba(255, 78, 132, 0.92);
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            transform: translate(6px, -50%);
+            transition: opacity 0.18s ease, transform 0.18s ease, color 0.18s ease, filter 0.18s ease;
+        }
+        .favorites-action-delete svg {
+            width: 18px;
+            height: 18px;
+        }
+        .favorites-action-delete:hover {
+            color: #ff0055;
+            filter: drop-shadow(0 0 7px rgba(255, 0, 85, 0.45));
+        }
+        .favorites-action-delete:focus-visible {
+            outline: 1px solid rgba(255, 0, 85, 0.45);
+            outline-offset: 2px;
+            border-radius: 4px;
+        }
+        .favorites-row:hover .favorites-action-delete,
+        .favorites-row:focus-within .favorites-action-delete {
+            opacity: 1;
+            visibility: visible;
+            pointer-events: auto;
+            transform: translate(0, -50%);
+        }
+
+        .favorites-empty {
+            text-align: center;
+            color: #707070;
+            padding: 22px 10px;
+            font-size: 12px;
+        }
         .status-badge {
             padding: 4px 8px;
             border-radius: 4px;
@@ -418,6 +942,7 @@
         .status-badge.completed { background: rgba(0, 255, 157, 0.1); color: var(--accent-primary); }
         .status-badge.running { background: rgba(0, 243, 255, 0.1); color: var(--accent-blue); }
         .status-badge.failed { background: rgba(255, 0, 85, 0.1); color: var(--accent-secondary); }
+        .status-badge.merged { background: rgba(255, 189, 46, 0.12); color: #ffd36b; }
         
         .update-callout {
             border: 1px solid rgba(255, 189, 46, 0.35);
@@ -505,10 +1030,34 @@
             animation: spin 1s linear infinite;
         }
         
-        .panel-actions {
-            margin-left: auto;
+        .details-toolbar-inline {
             display: flex;
+            align-items: center;
+            justify-content: space-between;
             gap: 10px;
+            margin-bottom: 10px;
+        }
+        .details-inline-title {
+            font-family: var(--font-mono);
+            font-size: 13px;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #cfd6de;
+            white-space: nowrap;
+        }
+        .details-toolbar-inline-actions {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: auto;
+        }
+        .details-toolbar-inline-actions .action-btn {
+            height: 30px;
+            border-radius: 6px;
+            padding: 0 12px;
+        }
+        .details-toolbar-inline-actions .action-btn:last-child {
+            min-width: 86px;
         }
 
         .details-grid {
@@ -527,6 +1076,124 @@
         .detail-item span {
             font-size: 14px;
             color: var(--text-main);
+        }
+        @media (max-width: 1500px) {
+            .bulk-stats-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+        @media (max-width: 1300px) {
+            .details-top-layout {
+                grid-template-columns: 1fr;
+            }
+            .bulk-stats-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+        @media (max-width: 980px) {
+            .details-toolbar-inline {
+                flex-wrap: wrap;
+                align-items: flex-start;
+            }
+            .details-toolbar-inline-actions {
+                margin-left: 0;
+                flex-wrap: wrap;
+            }
+        }
+        @media (max-width: 820px) {
+            .bulk-stats-grid,
+            .details-config-grid {
+                grid-template-columns: 1fr;
+            }
+            .bulk-head-right,
+            .bulk-inline-actions {
+                flex-wrap: wrap;
+            }
+        }
+        .details-results-row {
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+        .details-results-row:hover,
+        .details-results-row:focus-within {
+            background: rgba(255, 255, 255, 0.03);
+        }
+        .details-slug {
+            color: #fff;
+            font-weight: 600;
+            font-size: 12px;
+            word-break: break-word;
+        }
+        .details-dup-chip {
+            margin-left: 6px;
+            padding: 2px 6px;
+            border-radius: 999px;
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            background: rgba(255, 255, 255, 0.05);
+            color: #9aa3ad;
+            font-size: 9px;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+        .details-row-actions {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 6px;
+            flex-wrap: nowrap;
+            white-space: nowrap;
+        }
+        .details-fav-btn,
+        .details-wp-btn,
+        .details-open-btn {
+            height: 24px;
+            padding: 0 8px;
+            font-size: 10px;
+            border-radius: 6px;
+        }
+        .details-fav-btn {
+            width: 24px;
+            min-width: 24px;
+            padding: 0;
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: #666;
+        }
+        .details-fav-btn.active {
+            background: rgba(255, 189, 46, 0.12);
+            border-color: rgba(255, 189, 46, 0.45);
+            color: #ffbd2e;
+        }
+        .details-wp-btn {
+            background: #1f242b;
+            color: #c7d6df;
+            border: 1px solid rgba(255, 255, 255, 0.24);
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 34px;
+            min-width: 34px;
+            padding: 0;
+        }
+        .details-wp-btn:hover {
+            border-color: rgba(0, 243, 255, 0.55);
+            color: #ffffff;
+        }
+        .wp-logo-icon {
+            width: 19px;
+            height: 19px;
+            display: inline-block;
+            background-color: currentColor;
+            -webkit-mask: url('assets/wordpress-icon.svg') center / contain no-repeat;
+            mask: url('assets/wordpress-icon.svg') center / contain no-repeat;
+        }
+        .details-open-btn {
+            background: var(--accent-primary);
+            color: #000;
+            border: none;
+            font-weight: 700;
         }
         .risk-high { color: var(--accent-secondary); }
         .risk-medium { color: #ffbd2e; }
@@ -655,6 +1322,421 @@
         }
         .code-item:last-child { border-bottom: none; }
 
+        /* Plugin Detail Page */
+        #plugin-detail-view {
+            padding: 34px;
+        }
+        #plugin-detail-view .view-header {
+            grid-template-columns: auto 1fr auto;
+            column-gap: 14px;
+            align-items: center;
+        }
+        #plugin-detail-view .view-header-title {
+            font-size: 22px;
+            letter-spacing: 0.05em;
+            min-width: 0;
+        }
+        #plugin-detail-view .view-header-desc {
+            font-size: 14px;
+            white-space: normal;
+            overflow: visible;
+            text-overflow: clip;
+            line-height: 1.4;
+            min-width: 0;
+        }
+        .plugin-detail-shell {
+            padding-top: 18px;
+        }
+        .plugin-detail-layout {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(360px, 38%);
+            gap: 14px;
+            align-items: stretch;
+        }
+        .plugin-detail-main {
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+        .plugin-hero,
+        .plugin-section,
+        .plugin-ai-panel {
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.02);
+            padding: 14px 16px;
+        }
+        .plugin-metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 10px;
+            margin: 0;
+        }
+        .plugin-metric-card {
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 10px 11px;
+            background: rgba(8, 11, 15, 0.55);
+            display: grid;
+            gap: 4px;
+        }
+        .plugin-metric-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            color: #8fa1b4;
+            font-family: var(--font-mono);
+        }
+        .plugin-metric-value {
+            font-size: 20px;
+            line-height: 1;
+            color: #f1f6ff;
+            font-weight: 700;
+            font-family: var(--font-mono);
+        }
+        .plugin-metric-sub {
+            font-size: 11px;
+            color: #8ea0b2;
+            line-height: 1.35;
+        }
+        .plugin-tag-row {
+            margin-bottom: 10px;
+        }
+        .plugin-action-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .plugin-toolbar {
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.02);
+            padding: 10px 14px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .plugin-toolbar-tags {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 6px;
+            min-width: 0;
+        }
+        .plugin-toolbar-tags .tag {
+            margin-bottom: 0;
+            margin-right: 0;
+        }
+        .plugin-toolbar-actions {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 8px;
+        }
+        .plugin-fav-inline {
+            width: 36px;
+            height: 36px;
+            min-width: 36px;
+            padding: 0;
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .plugin-action-download,
+        .plugin-action-secondary,
+        .plugin-action-fav {
+            width: auto;
+            height: 32px;
+            padding: 0 11px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+        }
+        .plugin-action-download {
+            text-decoration: none;
+            background: rgba(0, 255, 157, 0.14);
+            border: 1px solid rgba(0, 255, 157, 0.45);
+            color: var(--accent-primary);
+            font-weight: 700;
+        }
+        .plugin-action-secondary {
+            background: rgba(0, 243, 255, 0.1);
+            border: 1px solid var(--accent-blue);
+            color: var(--accent-blue);
+        }
+        .plugin-action-fav {
+            background: transparent;
+            border: 1px solid var(--accent-primary);
+            color: var(--accent-primary);
+        }
+        .plugin-section .section-title {
+            margin-top: 0;
+            margin-bottom: 10px;
+        }
+        .plugin-section .link-grid {
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 8px;
+        }
+        .plugin-section .ext-link {
+            padding: 9px;
+            font-size: 11px;
+            border-radius: 6px;
+        }
+        .plugin-semgrep-empty {
+            border: 1px dashed rgba(0, 243, 255, 0.32);
+            border-radius: 8px;
+            background: rgba(0, 243, 255, 0.05);
+            color: #b9c7d4;
+            font-size: 12px;
+            padding: 14px;
+            text-align: center;
+            line-height: 1.45;
+        }
+        .plugin-semgrep-summary {
+            margin-bottom: 12px;
+            font-size: 14px;
+            color: #a5b3bf;
+        }
+        .plugin-semgrep-summary strong {
+            color: #fff;
+        }
+        .plugin-semgrep-summary .sev-error { color: #ff5f56; }
+        .plugin-semgrep-summary .sev-warning { color: #ffbd2e; }
+        .plugin-semgrep-item {
+            border: 1px solid #252833;
+            border-left: 3px solid #00f3ff;
+            border-radius: 10px;
+            background: #13161a;
+            padding: 13px;
+            margin-bottom: 10px;
+        }
+        .plugin-semgrep-item.error { border-left-color: #ff5f56; }
+        .plugin-semgrep-item.warning { border-left-color: #ffbd2e; }
+        .plugin-semgrep-item-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 6px;
+        }
+        .plugin-semgrep-rule {
+            font-size: 13px;
+            font-weight: 700;
+            color: #d7f7ff;
+        }
+        .plugin-semgrep-file {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            color: #778391;
+            text-align: right;
+            word-break: break-all;
+        }
+        .plugin-semgrep-message {
+            margin: 0 0 9px;
+            font-size: 13px;
+            color: #c6d0da;
+            line-height: 1.5;
+        }
+        .plugin-semgrep-code {
+            margin: 0;
+            border: 1px solid #2a2f38;
+            border-radius: 6px;
+            background: #090b0f;
+            padding: 8px;
+            overflow-x: auto;
+        }
+        .plugin-semgrep-code code {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            color: #9fb2c4;
+            white-space: pre;
+        }
+        .plugin-ai-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            min-height: calc(100vh - 190px);
+            max-height: calc(100vh - 190px);
+            position: sticky;
+            top: 12px;
+            background:
+                radial-gradient(circle at 20% 0%, rgba(0, 243, 255, 0.08), transparent 42%),
+                radial-gradient(circle at 80% 100%, rgba(0, 255, 157, 0.08), transparent 48%),
+                rgba(16, 19, 24, 0.95);
+            border-color: rgba(255, 255, 255, 0.14);
+            overflow: hidden;
+        }
+        .plugin-ai-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+        .plugin-ai-head h3 {
+            margin: 0;
+            font-size: 13px;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            font-family: var(--font-mono);
+            color: #e6f7ff;
+        }
+        .plugin-ai-badge {
+            font-size: 10px;
+            font-family: var(--font-mono);
+            color: #b5e6ff;
+            border: 1px solid rgba(148, 164, 196, 0.4);
+            background: rgba(148, 164, 196, 0.12);
+            border-radius: 999px;
+            padding: 3px 8px;
+        }
+        .plugin-ai-hero {
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.02);
+            padding: 14px 10px;
+        }
+        .plugin-ai-hero-icon {
+            width: 44px;
+            height: 44px;
+            margin: 0 auto 8px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            display: grid;
+            place-items: center;
+            font-size: 18px;
+            color: #c8d8e8;
+            background: rgba(255, 255, 255, 0.03);
+        }
+        .plugin-ai-hero h4 {
+            margin: 0 0 8px;
+            font-size: 30px;
+            font-weight: 500;
+            color: #f2f5fb;
+            line-height: 1.2;
+        }
+        .plugin-ai-hero p {
+            margin: 0;
+            font-size: 14px;
+            color: #9aabbc;
+            line-height: 1.5;
+        }
+        .plugin-ai-messages {
+            flex: 1;
+            min-height: 160px;
+            overflow: auto;
+            display: grid;
+            gap: 8px;
+            align-content: start;
+            padding-right: 2px;
+        }
+        .plugin-ai-message {
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 9px;
+            background: rgba(7, 10, 14, 0.72);
+            padding: 9px;
+        }
+        .plugin-ai-message strong {
+            display: block;
+            font-size: 11px;
+            color: #9cd6ff;
+            margin-bottom: 4px;
+        }
+        .plugin-ai-message p {
+            margin: 0;
+            font-size: 12px;
+            color: #bac5d2;
+            line-height: 1.45;
+        }
+        .plugin-ai-pills {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .plugin-ai-pill {
+            height: 28px;
+            padding: 0 10px;
+            border-radius: 999px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: rgba(255, 255, 255, 0.03);
+            color: #b2bfce;
+            font-size: 11px;
+            font-family: var(--font-mono);
+        }
+        .plugin-ai-bottom {
+            margin-top: auto;
+            display: grid;
+            gap: 8px;
+        }
+        .plugin-ai-status {
+            font-size: 11px;
+            color: #8ea1b3;
+            padding: 0 2px;
+        }
+        .plugin-ai-input-wrap {
+            display: grid;
+            gap: 8px;
+        }
+        .plugin-ai-composer {
+            position: relative;
+        }
+        .plugin-ai-input-wrap textarea {
+            width: 100%;
+            min-height: 92px;
+            resize: none;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            background: rgba(8, 11, 15, 0.92);
+            color: #9fb2c4;
+            padding: 10px 86px 10px 10px;
+            font-family: var(--font-mono);
+            font-size: 12px;
+        }
+        .plugin-ai-send {
+            position: absolute;
+            right: 8px;
+            bottom: 8px;
+            width: auto;
+            min-width: 50px;
+            height: 24px;
+            padding: 0 9px;
+            font-size: 9px;
+            opacity: 0.95;
+            background: rgba(0, 255, 157, 0.78);
+            color: #052119;
+            border: 1px solid rgba(0, 255, 157, 0.65);
+            border-radius: 7px;
+        }
+        @media (max-width: 1200px) {
+            .plugin-detail-layout {
+                grid-template-columns: 1fr;
+            }
+            .plugin-metrics-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            .plugin-ai-panel {
+                position: static;
+                min-height: 0;
+                max-height: none;
+            }
+        }
+        @media (max-width: 700px) {
+            .plugin-metrics-grid {
+                grid-template-columns: 1fr;
+            }
+            .plugin-toolbar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .plugin-toolbar-actions {
+                justify-content: flex-start;
+            }
+        }
+
         /* Bulk Scan Animations */
         @keyframes shimmer {
             0% { transform: translateX(-100%); }
@@ -680,21 +1762,59 @@
             background: var(--accent-primary) !important;
         }
 
-        @media (min-width: 1600px) {
+        @media (min-width: 1600px) and (min-height: 900px) {
             .nav-item {
-                padding: 12px 14px;
-                gap: 11px;
-                font-size: 14px;
+                padding: 13px 15px;
+                gap: 12px;
+                font-size: 15px;
+            }
+
+            .panel-header h2 {
+                font-size: 16px;
+            }
+
+            .panel-icon {
+                font-size: 13px;
             }
 
             .history-table {
-                font-size: 13px;
+                font-size: 14px;
             }
 
             .history-table th,
             .history-table td {
-                padding-top: 14px;
-                padding-bottom: 14px;
+                padding-top: 15px;
+                padding-bottom: 15px;
+            }
+
+            .history-filters {
+                grid-template-columns: minmax(260px, 1fr) repeat(3, minmax(130px, 190px));
+                gap: 12px;
+                margin-bottom: 14px;
+            }
+
+            .history-filter-group label {
+                font-size: 11px;
+            }
+
+            .history-filter-group input,
+            .history-filter-group select {
+                height: 36px;
+                font-size: 13px;
+                padding: 0 12px;
+            }
+
+            .table-pagination-info {
+                font-size: 12px;
+            }
+
+            .table-page-btn {
+                height: 32px;
+                font-size: 12px;
+            }
+
+            .table-page-current {
+                font-size: 13px;
             }
 
             .history-table th.history-col-id,
@@ -733,16 +1853,16 @@
             }
 
             .status-badge {
-                font-size: 11px;
-                padding: 5px 10px;
+                font-size: 12px;
+                padding: 6px 11px;
             }
 
             .history-found-count {
-                font-size: 15px;
+                font-size: 16px;
             }
 
             .history-found-label {
-                font-size: 10px;
+                font-size: 11px;
             }
 
             .history-found-track,
@@ -753,8 +1873,8 @@
 
             .history-risk-pill {
                 min-width: 30px;
-                padding: 4px 8px;
-                font-size: 11px;
+                padding: 4px 9px;
+                font-size: 12px;
             }
 
             .history-semgrep-cell {
@@ -763,12 +1883,12 @@
             }
 
             .history-semgrep-state {
-                font-size: 10px;
+                font-size: 11px;
             }
 
             .history-semgrep-pill {
-                font-size: 11px;
-                min-width: 44px;
+                font-size: 12px;
+                min-width: 46px;
             }
 
             .history-semgrep-meter {
@@ -777,19 +1897,220 @@
             }
 
             .history-mode-chip {
-                font-size: 10px;
-                min-width: 72px;
-                padding: 4px 9px;
+                font-size: 11px;
+                min-width: 76px;
+                padding: 4px 10px;
             }
 
             .history-action-open {
-                font-size: 11px;
-                padding: 5px 11px;
+                font-size: 12px;
+                padding: 5px 12px;
             }
 
             .history-action-delete {
                 width: 24px;
                 height: 24px;
+            }
+
+            .favorites-table th,
+            .favorites-table td {
+                padding-top: 14px;
+                padding-bottom: 14px;
+                font-size: 13px;
+            }
+
+            .favorites-slug {
+                font-size: 13px;
+            }
+
+            .favorites-version-chip {
+                min-width: 76px;
+                padding: 4px 10px;
+                font-size: 11px;
+            }
+
+            .favorites-installs-count {
+                font-size: 13px;
+            }
+
+            .favorites-installs-track {
+                width: 96px;
+                height: 7px;
+            }
+
+            .favorites-score-pill {
+                min-width: 34px;
+                padding: 4px 9px;
+                font-size: 11px;
+            }
+
+            .favorites-score-meter {
+                width: 96px;
+                height: 7px;
+            }
+
+            .favorites-updated-chip {
+                min-width: 76px;
+                padding: 4px 10px;
+                font-size: 11px;
+            }
+
+            .favorites-table th.favorites-col-slug,
+            .favorites-table td.favorites-col-slug { padding-right: 8px; }
+
+            .favorites-table th.favorites-col-version,
+            .favorites-table td.favorites-col-version { padding-left: 8px; }
+
+            .favorites-table th.favorites-col-slug,
+            .favorites-table td.favorites-col-slug { width: 230px; }
+
+            .favorites-table th.favorites-col-version,
+            .favorites-table td.favorites-col-version { width: 108px; }
+
+            .favorites-action-open {
+                font-size: 11px;
+                padding: 5px 11px;
+            }
+
+            .favorites-action-delete {
+                width: 24px;
+                height: 24px;
+            }
+
+            .details-toolbar-inline-actions .action-btn {
+                height: 34px;
+                padding: 0 14px;
+                font-size: 12px;
+            }
+
+            .details-inline-title {
+                font-size: 15px;
+            }
+
+            .details-shell {
+                gap: 16px;
+            }
+
+            .details-top-layout {
+                gap: 14px;
+            }
+
+            .bulk-card {
+                padding: 12px 14px;
+                gap: 9px;
+            }
+
+            .bulk-head-title {
+                font-size: 15px;
+            }
+
+            .bulk-head-note {
+                font-size: 12px;
+                line-height: 1.4;
+            }
+
+            .bulk-status-chip {
+                min-width: 94px;
+                padding: 4px 10px;
+                font-size: 11px;
+            }
+
+            .bulk-progress-meta {
+                font-size: 11px;
+            }
+
+            .bulk-progress-percent {
+                font-size: 14px;
+            }
+
+            .bulk-progress-track {
+                height: 9px;
+            }
+
+            .bulk-stats-grid {
+                gap: 10px;
+            }
+
+            .bulk-stat-card {
+                padding: 10px 12px;
+            }
+
+            .bulk-stat-label {
+                font-size: 9px;
+                margin-bottom: 5px;
+            }
+
+            .bulk-stat-value {
+                font-size: 18px;
+            }
+
+            .bulk-stat-value-sub {
+                font-size: 12px;
+            }
+
+            .bulk-inline-actions .action-btn {
+                height: 30px;
+                padding: 0 12px;
+                font-size: 11px;
+            }
+
+            .details-config-grid {
+                gap: 8px;
+            }
+
+            .details-config-item {
+                padding: 8px 10px;
+            }
+
+            .details-config-item-label {
+                font-size: 9px;
+                margin-bottom: 3px;
+            }
+
+            .details-config-item-value {
+                font-size: 13px;
+            }
+
+            .details-results-title {
+                font-size: 16px;
+            }
+
+            .details-slug {
+                font-size: 13px;
+            }
+
+            .details-dup-chip {
+                font-size: 10px;
+                padding: 3px 7px;
+            }
+
+            .details-row-actions {
+                gap: 8px;
+            }
+
+            .details-fav-btn,
+            .details-wp-btn,
+            .details-open-btn {
+                height: 28px;
+                padding: 0 10px;
+                font-size: 11px;
+            }
+
+            .details-fav-btn {
+                width: 28px;
+                min-width: 28px;
+                padding: 0;
+            }
+
+            .details-wp-btn {
+                width: 36px;
+                min-width: 36px;
+                padding: 0;
+            }
+
+            .wp-logo-icon {
+                width: 20px;
+                height: 20px;
             }
         }
     </style>
@@ -831,6 +2152,14 @@
                             <line x1="8" y1="12" x2="16" y2="12"></line>
                         </svg>
                         <span class="nav-label">NEW SCAN</span>
+                    </button>
+                    <button class="nav-item" id="nav-catalog" onclick="switchTab('catalog')">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <ellipse cx="12" cy="5" rx="8" ry="3"></ellipse>
+                            <path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"></path>
+                            <path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"></path>
+                        </svg>
+                        <span class="nav-label">DATABASE</span>
                     </button>
                     <button class="nav-item" id="nav-history" onclick="switchTab('history')">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -888,6 +2217,10 @@
             <form id="configForm" onsubmit="return false;">
                 <section class="panel scan-dashboard">
                     <div class="panel-body">
+                        <div class="view-header">
+                            <div class="view-header-title">NEW SCAN</div>
+                            <div class="view-header-desc">Configure filters and launch a new plugin or theme scan session.</div>
+                        </div>
                         <div class="dashboard-shell">
                             <div class="dashboard-main">
                                 <div class="dashboard-metrics">
@@ -974,98 +2307,134 @@
                             </div>
 
                             <aside class="dashboard-side">
-                                <article class="side-card">
-                                    <div class="side-head">
+                                <article class="side-card quick-setup-card">
+                                    <div class="quick-setup-header">
                                         <h3>Quick Setup</h3>
-                                        <div class="quick-head-actions">
-                                            <button id="runBtn" class="action-btn quick-run-btn" onclick="runScan()">
-                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                                                </svg>
-                                                <span>RUN SCAN</span>
-                                            </button>
-                                        </div>
+                                        <button id="runBtn" class="action-btn quick-run-btn" onclick="runScan()">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                                            </svg>
+                                            <span>RUN SCAN</span>
+                                        </button>
                                     </div>
-                                    <div class="quick-grid">
-                                        <div class="control-group">
-                                            <label>Pages</label>
-                                            <input type="number" name="pages" value="5" min="1" max="50">
-                                        </div>
-                                        <div class="control-group">
-                                            <label>Min Installs</label>
-                                            <input type="number" name="min_installs" value="1000" min="0" placeholder="0">
-                                        </div>
-                                        <div class="control-group">
-                                            <label>Sort</label>
-                                            <div class="select-wrapper">
-                                                <select name="sort">
-                                                    <option value="updated">Last Updated</option>
-                                                    <option value="active_installs">Popularity</option>
-                                                    <option value="new">Newest Added</option>
-                                                </select>
+
+                                    <div class="quick-setup-block">
+                                        <div class="quick-setup-grid">
+                                            <div class="control-group">
+                                                <label>Pages <span class="info-icon" data-tooltip="How many catalog pages to scan. Higher value finds more targets but takes longer.">i</span></label>
+                                                <input type="number" name="pages" value="5" min="1" max="50">
+                                            </div>
+                                            <div class="control-group">
+                                                <label>Min Installs <span class="info-icon" data-tooltip="Only include plugins/themes with at least this many active installs.">i</span></label>
+                                                <input type="number" name="min_installs" value="1000" min="0" placeholder="0">
+                                            </div>
+                                            <div class="control-group quick-setup-grid-span-2">
+                                                <label>Sort <span class="info-icon" data-tooltip="Choose how WordPress directory results are ordered before filtering.">i</span></label>
+                                                <div class="select-wrapper">
+                                                    <select name="sort">
+                                                        <option value="updated">Last Updated</option>
+                                                        <option value="active_installs">Popularity</option>
+                                                        <option value="new">Newest Added</option>
+                                                    </select>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
 
-                                    <div class="quick-toggles">
+                                    <div class="quick-setup-block quick-setup-switch-grid">
                                         <label class="toggle-card">
                                             <input type="checkbox" name="smart">
                                             <div class="toggle-content">
-                                                <span class="toggle-title">Smart Mode</span>
-                                                <span class="toggle-desc">Heuristic analysis</span>
+                                                <span class="toggle-title">Smart Mode <span class="info-icon" data-tooltip="Applies heuristic risk checks and prioritization while scanning.">i</span></span>
                                             </div>
                                             <div class="toggle-switch"></div>
                                         </label>
                                         <label class="toggle-card danger">
                                             <input type="checkbox" name="abandoned">
                                             <div class="toggle-content">
-                                                <span class="toggle-title">Abandoned</span>
-                                                <span class="toggle-desc">High risk focus</span>
+                                                <span class="toggle-title">Abandoned <span class="info-icon" data-tooltip="Focus on targets with stale update history and potentially higher maintenance risk.">i</span></span>
+                                            </div>
+                                            <div class="toggle-switch"></div>
+                                        </label>
+                                        <label class="toggle-card">
+                                            <input type="checkbox" name="themes">
+                                            <div class="toggle-content">
+                                                <span class="toggle-title">Scan Themes <span class="info-icon" data-tooltip="Include WordPress themes in addition to plugins.">i</span></span>
+                                            </div>
+                                            <div class="toggle-switch"></div>
+                                        </label>
+                                        <label class="toggle-card">
+                                            <input type="checkbox" name="user_facing">
+                                            <div class="toggle-content">
+                                                <span class="toggle-title">User Facing <span class="info-icon" data-tooltip="Prioritize components that process user input and public-facing requests.">i</span></span>
                                             </div>
                                             <div class="toggle-switch"></div>
                                         </label>
                                     </div>
 
-                                    <div class="advanced-toggle">
-                                        <div class="advanced-title">Advanced Filters</div>
-                                        <div class="advanced-grid">
+                                    <div class="quick-setup-block">
+                                        <div class="quick-setup-grid quick-setup-grid-compact">
                                             <div class="control-group">
-                                                <label>Max Installs</label>
+                                                <label>Max Installs <span class="info-icon" data-tooltip="Upper install-count threshold. 0 means no upper limit.">i</span></label>
                                                 <input type="number" name="max_installs" value="0" min="0" placeholder="Unlimited">
                                             </div>
                                             <div class="control-group">
-                                                <label>Limit</label>
+                                                <label>Limit <span class="info-icon" data-tooltip="Maximum number of targets to keep from this scan. 0 means unlimited.">i</span></label>
                                                 <input type="number" name="limit" value="0" min="0" placeholder="No Limit">
                                             </div>
                                             <div class="control-group">
-                                                <label>Min Days</label>
+                                                <label>Min Days <span class="info-icon" data-tooltip="Only include items updated at least this many days ago.">i</span></label>
                                                 <input type="number" name="min_days" value="0" min="0" placeholder="0">
                                             </div>
                                             <div class="control-group">
-                                                <label>Max Days</label>
+                                                <label>Max Days <span class="info-icon" data-tooltip="Only include items updated at most this many days ago. 0 means no upper bound.">i</span></label>
                                                 <input type="number" name="max_days" value="0" min="0" placeholder="Unlimited">
                                             </div>
-                                            <label class="toggle-card">
-                                                <input type="checkbox" name="themes">
-                                                <div class="toggle-content">
-                                                    <span class="toggle-title">Scan Themes</span>
-                                                    <span class="toggle-desc">Theme repository</span>
-                                                </div>
-                                                <div class="toggle-switch"></div>
-                                            </label>
-                                            <label class="toggle-card">
-                                                <input type="checkbox" name="user_facing">
-                                                <div class="toggle-content">
-                                                    <span class="toggle-title">User Facing</span>
-                                                    <span class="toggle-desc">Input-heavy targets</span>
-                                                </div>
-                                                <div class="toggle-switch"></div>
-                                            </label>
                                         </div>
+                                    </div>
+
+                                    <div class="quick-setup-help" role="note" aria-label="Quick setup guide">
+                                        <div class="quick-setup-help-title">Quick Guide</div>
+                                        <ul>
+                                            <li>Hover the <strong>i</strong> icon to see what each parameter does.</li>
+                                            <li>Use <strong>Pages + Min Installs</strong> for broad/fast scans.</li>
+                                            <li>Use <strong>Min/Max Days</strong> to target stale or recently updated items.</li>
+                                        </ul>
                                     </div>
                                 </article>
                             </aside>
                         </div>
+
+                        <section class="scan-footer-info" aria-label="About and support">
+                            <article class="scan-footer-card">
+                                <h3>What WP-Hunter does</h3>
+                                <p>
+                                    WP-Hunter is a local reconnaissance and static analysis tool for WordPress plugins/themes.
+                                    It helps you discover targets, prioritize risk with metadata signals, and run deep Semgrep-backed checks.
+                                </p>
+                                <ul>
+                                    <li>Discover plugin/theme targets from WordPress directory pages.</li>
+                                    <li>Prioritize by installs, update freshness, and risk score signals.</li>
+                                    <li>Run Semgrep scans and review issue/clean status quickly.</li>
+                                </ul>
+                            </article>
+
+                            <article class="scan-footer-card scan-footer-support">
+                                <h3>Need help or found a bug?</h3>
+                                <p>Open an issue for bug reports and feature requests, or contact the maintainer directly by email.</p>
+                                <div class="scan-footer-actions">
+                                    <a class="action-btn scan-footer-link" href="https://github.com/xeloxa/wp-hunter/issues" target="_blank" rel="noreferrer noopener">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a12 12 0 0 0-3.79 23.39c.6.11.82-.26.82-.58v-2.23c-3.34.73-4.04-1.6-4.04-1.6a3.18 3.18 0 0 0-1.33-1.76c-1.09-.75.08-.74.08-.74a2.52 2.52 0 0 1 1.84 1.24 2.55 2.55 0 0 0 3.49 1 2.54 2.54 0 0 1 .76-1.6c-2.67-.3-5.48-1.34-5.48-5.95a4.66 4.66 0 0 1 1.24-3.24 4.33 4.33 0 0 1 .12-3.2s1-.32 3.3 1.24a11.34 11.34 0 0 1 6 0c2.27-1.56 3.29-1.24 3.29-1.24a4.33 4.33 0 0 1 .12 3.2 4.65 4.65 0 0 1 1.24 3.24c0 4.62-2.81 5.65-5.49 5.95a2.84 2.84 0 0 1 .81 2.2v3.27c0 .32.21.7.83.58A12 12 0 0 0 12 .5Z"/></svg>
+                                        <span>Open GitHub Issue</span>
+                                    </a>
+                                    <a class="action-btn scan-footer-link secondary" href="mailto:alisunbul@proton.me">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 4h16v16H4z"></path><path d="m22 6-10 7L2 6"></path></svg>
+                                        <span>Email Maintainer</span>
+                                    </a>
+                                </div>
+                                <div class="scan-footer-meta">Response channel: GitHub Issues / alisunbul@proton.me</div>
+                            </article>
+                        </section>
                     </div>
                 </section>
             </form>
@@ -1074,13 +2443,45 @@
         <!-- History View -->
         <main class="config-area" id="history-view" style="display: none;">
             <div class="panel">
-                <div class="panel-header">
-                    <span class="panel-icon">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                    </span>
-                    <h2>Scan History</h2>
-                </div>
                 <div class="panel-body">
+                    <div class="view-header">
+                        <div class="view-header-title">HISTORY</div>
+                        <div class="view-header-desc">Review past scan sessions, statuses, and risk distribution over time.</div>
+                    </div>
+                    <div class="history-filters">
+                        <div class="history-filter-group">
+                            <label for="history-filter-query">Search</label>
+                            <input id="history-filter-query" type="text" placeholder="Scan ID, status, date..." autocomplete="off">
+                        </div>
+                        <div class="history-filter-group">
+                            <label for="history-filter-status">Status</label>
+                            <select id="history-filter-status">
+                                <option value="all">All</option>
+                                <option value="completed">Completed</option>
+                                <option value="merged">Merged</option>
+                                <option value="running">Running</option>
+                                <option value="failed">Failed</option>
+                                <option value="cancelled">Cancelled</option>
+                            </select>
+                        </div>
+                        <div class="history-filter-group">
+                            <label for="history-filter-mode">Mode</label>
+                            <select id="history-filter-mode">
+                                <option value="all">All</option>
+                                <option value="plugin">Plugin</option>
+                                <option value="theme">Theme</option>
+                            </select>
+                        </div>
+                        <div class="history-filter-group">
+                            <label for="history-filter-risk">Risk</label>
+                            <select id="history-filter-risk">
+                                <option value="all">All</option>
+                                <option value="high">High</option>
+                                <option value="medium">Medium</option>
+                                <option value="low">Low</option>
+                            </select>
+                        </div>
+                    </div>
                     <div class="history-table-container">
                         <table class="history-table">
                             <thead>
@@ -1100,6 +2501,85 @@
                             </tbody>
                         </table>
                     </div>
+                    <div class="table-pagination" id="history-pagination" style="display: none;">
+                        <span class="table-pagination-info" id="history-page-info">Showing 0-0 of 0</span>
+                        <div class="table-pagination-controls">
+                            <button class="table-page-btn" id="history-page-prev" type="button" onclick="changeHistoryPage(-1)">Prev</button>
+                            <span class="table-page-current" id="history-page-current">1 / 1</span>
+                            <button class="table-page-btn" id="history-page-next" type="button" onclick="changeHistoryPage(1)">Next</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Plugin Store View -->
+        <main class="config-area" id="catalog-view" style="display: none;">
+            <div class="panel">
+                <div class="panel-body">
+                    <div class="view-header">
+                        <div class="view-header-title">DATABASE</div>
+                        <div class="view-header-desc">Master deduplicated catalog of all plugins discovered across your scans.</div>
+                    </div>
+
+                    <div id="catalog-dashboard" class="details-dashboard"></div>
+
+                    <div class="history-filters">
+                        <div class="history-filter-group">
+                            <label for="catalog-filter-query">Search</label>
+                            <input id="catalog-filter-query" type="text" placeholder="Plugin slug..." autocomplete="off">
+                        </div>
+                        <div class="history-filter-group">
+                            <label for="catalog-filter-sort">Sort</label>
+                            <select id="catalog-filter-sort">
+                                <option value="last_seen">Last seen</option>
+                                <option value="seen_count">Seen count</option>
+                                <option value="max_score">Max risk</option>
+                                <option value="installs">Installs</option>
+                                <option value="updated_days">Updated days</option>
+                                <option value="slug">Slug</option>
+                            </select>
+                        </div>
+                        <div class="history-filter-group">
+                            <label for="catalog-filter-type">Type</label>
+                            <select id="catalog-filter-type">
+                                <option value="all">All</option>
+                                <option value="plugin">Plugin</option>
+                                <option value="theme">Theme</option>
+                            </select>
+                        </div>
+                        <div class="history-filter-group">
+                            <label for="catalog-filter-order">Order</label>
+                            <select id="catalog-filter-order">
+                                <option value="desc">Descending</option>
+                                <option value="asc">Ascending</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="history-table-container">
+                        <table class="history-table catalog-table">
+                            <thead>
+                                <tr>
+                                    <th class="details-col-slug">Slug</th>
+                                    <th class="details-col-version">Version</th>
+                                    <th class="details-col-score">Score</th>
+                                    <th class="details-col-updated">Updated</th>
+                                    <th class="details-col-installs">Installs</th>
+                                    <th class="details-col-semgrep">Semgrep</th>
+                                    <th class="details-col-actions">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="catalog-list"></tbody>
+                        </table>
+                    </div>
+                    <div class="table-pagination" id="catalog-pagination" style="display: none;">
+                        <span class="table-pagination-info" id="catalog-page-info">Showing 0-0 of 0</span>
+                        <div class="table-pagination-controls">
+                            <button class="table-page-btn" id="catalog-page-prev" type="button" onclick="changeCatalogPage(-1)">Prev</button>
+                            <span class="table-page-current" id="catalog-page-current">1 / 1</span>
+                            <button class="table-page-btn" id="catalog-page-next" type="button" onclick="changeCatalogPage(1)">Next</button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </main>
@@ -1107,93 +2587,76 @@
         <!-- Details View -->
         <main class="config-area" id="scan-details-view" style="display: none;">
             <div class="panel">
-                <div class="panel-header">
-                    <span class="panel-icon">D</span>
-                    <h2 id="details-title">Scan Details</h2>
-                    <div class="panel-actions">
-                        <button class="action-btn" onclick="switchTab('history')">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
-                            BACK
-                        </button>
-                        <button class="action-btn" onclick="runBulkSemgrep(currentScanId)" id="btn-bulk-scan" style="background: rgba(0, 243, 255, 0.1); border: 1px solid var(--accent-blue); color: var(--accent-blue);">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
-                            SCAN ALL (SEMGREP)
-                        </button>
-                        <button class="action-btn" onclick="stopBulkSemgrep(currentScanId)" id="btn-bulk-stop" style="display: none; background: rgba(255, 0, 85, 0.1); border: 1px solid #ff0055; color: #ff0055;">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12"></rect></svg>
-                            STOP SCAN
-                        </button>
-                        <button class="action-btn" onclick="downloadScanJSON(currentScanId)">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                            JSON
-                        </button>
-                    </div>
-                </div>
-                <div class="panel-body">
-                    <div id="bulk-dashboard" style="display: none; margin-bottom: 25px; padding: 20px; border: 1px solid var(--border-color); background: var(--bg-panel); border-radius: 4px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                            <div style="display: flex; align-items: center; gap: 10px;">
-                                <div id="bulk-status-dot" class="scan-pulse" style="width: 8px; height: 8px; border-radius: 50%; background: var(--accent-blue);"></div>
-                                <h3 style="font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); margin: 0; letter-spacing: 1px;">SEMGREP ANALYSIS</h3>
-                            </div>
-                            <span id="bulk-status" style="font-family: var(--font-mono); font-size: 10px; color: var(--accent-blue); padding: 3px 8px; border: 1px solid rgba(0, 243, 255, 0.2); border-radius: 2px;">READY</span>
-                        </div>
-
-                        <!-- Simplified Progress Bar -->
-                        <div style="background: #000; height: 4px; border-radius: 2px; overflow: hidden; margin-bottom: 20px; position: relative;">
-                            <div id="bulk-progress-bar" style="width: 0%; height: 100%; background: var(--accent-blue); transition: width 0.3s ease;"></div>
-                        </div>
-
-                        <!-- Stats Grid -->
-                        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border-color); border: 1px solid var(--border-color); border-radius: 2px; overflow: hidden;">
-                            <div style="background: var(--bg-panel); padding: 15px;">
-                                <div style="font-size: 9px; color: var(--text-muted); margin-bottom: 5px; font-family: var(--font-mono);">PROGRESS</div>
-                                <div style="font-size: 16px; color: #fff; font-family: var(--font-mono);"><span id="bulk-scanned">0</span><span style="color: #444; font-size: 12px;"> / <span id="bulk-total">0</span></span></div>
-                            </div>
-                            <div style="background: var(--bg-panel); padding: 15px;">
-                                <div style="font-size: 9px; color: var(--text-muted); margin-bottom: 5px; font-family: var(--font-mono);">FINDINGS</div>
-                                <div style="font-size: 16px; color: var(--accent-blue); font-family: var(--font-mono);" id="bulk-issues">0</div>
-                            </div>
-                            <div style="background: var(--bg-panel); padding: 15px;">
-                                <div style="font-size: 9px; color: #ff5f56; margin-bottom: 5px; font-family: var(--font-mono);">ERRORS</div>
-                                <div style="font-size: 16px; color: #ff5f56; font-family: var(--font-mono);" id="bulk-error-count">0</div>
-                            </div>
-                            <div style="background: var(--bg-panel); padding: 15px;">
-                                <div style="font-size: 9px; color: #ffbd2e; margin-bottom: 5px; font-family: var(--font-mono);">WARNINGS</div>
-                                <div style="font-size: 16px; color: #ffbd2e; font-family: var(--font-mono);" id="bulk-warn-count">0</div>
-                            </div>
-                        </div>
-
-                        <!-- Current Plugin Indicator -->
-                        <div id="bulk-current-plugin" style="margin-top: 15px; padding: 10px; background: #0a0a0a; border-radius: 4px; border: 1px solid #222; display: none;">
-                            <div style="display: flex; align-items: center; gap: 10px;">
-                                <div class="spinner" style="width: 14px; height: 14px; border: 2px solid #333; border-top-color: var(--accent-blue); border-radius: 50%; animation: spin 1s linear infinite;"></div>
-                                <span style="font-size: 11px; color: #888; font-family: var(--font-mono);">Analyzing: <span id="bulk-current-slug" style="color: var(--accent-blue);"></span></span>
-                            </div>
+                <div class="panel-body details-shell">
+                    <div class="view-header view-header-with-actions">
+                        <div class="view-header-title" id="details-view-title">SCAN DETAILS</div>
+                        <div class="view-header-desc" id="details-view-desc">Inspect plugins found in the selected scan and review risk context.</div>
+                        <div class="details-bulk-buttons">
+                            <button id="details-bulk-run" class="action-btn details-toolbar-btn-secondary" onclick="startDetailsBulkSemgrep()"><span class="semgrep-logo-icon" aria-hidden="true"></span><span class="semgrep-btn-label">Scan All (Semgrep)</span></button>
+                            <button id="details-bulk-stop" class="action-btn details-toolbar-btn-danger" onclick="stopDetailsBulkSemgrep()" style="display:none;">Stop</button>
                         </div>
                     </div>
 
-                    <div class="details-grid" id="details-summary">
-                        <!-- Summary injected here -->
+                    <div id="details-dashboard" class="details-dashboard"></div>
+
+                    <div class="history-filters">
+                        <div class="history-filter-group">
+                            <label for="details-filter-query">Search</label>
+                            <input id="details-filter-query" type="text" placeholder="Plugin slug, version..." autocomplete="off">
+                        </div>
+                        <div class="history-filter-group">
+                            <label for="details-filter-installs">Installs Order</label>
+                            <select id="details-filter-installs">
+                                <option value="default">Default</option>
+                                <option value="installs_desc">Highest first</option>
+                                <option value="installs_asc">Lowest first</option>
+                            </select>
+                        </div>
+                        <div class="history-filter-group">
+                            <label for="details-filter-sort">Priority Order</label>
+                            <select id="details-filter-sort">
+                                <option value="default">Default</option>
+                                <option value="semgrep_desc">Most issues first</option>
+                                <option value="semgrep_asc">Least issues first</option>
+                                <option value="score_desc">Highest risk first</option>
+                                <option value="score_asc">Lowest risk first</option>
+                            </select>
+                        </div>
+                        <div class="history-filter-group">
+                            <label for="details-filter-updated-sort">Updated Order</label>
+                            <select id="details-filter-updated-sort">
+                                <option value="default">Default</option>
+                                <option value="updated_newest">Newest first</option>
+                                <option value="updated_oldest">Oldest first</option>
+                            </select>
+                        </div>
                     </div>
-                    
-                    <h3 style="font-family: var(--font-mono); font-size: 14px; margin-bottom: 15px; color: var(--text-muted);">RESULTS</h3>
+
                     <div class="history-table-container">
                         <table class="history-table">
                             <thead>
                                 <tr>
-                                    <th>SLUG</th>
-                                    <th>VERSION</th>
-                                    <th>SCORE</th>
-                                    <th>UPDATED</th>
-                                    <th>INSTALLS</th>
-                                    <th>ACTIONS</th>
+                                    <th class="details-col-slug">Slug</th>
+                                    <th class="details-col-version">Version</th>
+                                    <th class="details-col-score">Score</th>
+                                    <th class="details-col-updated">Updated</th>
+                                    <th class="details-col-installs">Installs</th>
+                                    <th class="details-col-semgrep">Semgrep</th>
+                                    <th class="details-col-actions">Actions</th>
                                 </tr>
                             </thead>
                             <tbody id="details-list">
                                 <!-- Results injected here -->
                             </tbody>
                         </table>
+                    </div>
+                    <div class="table-pagination" id="details-pagination" style="display: none;">
+                        <span class="table-pagination-info" id="details-page-info">Showing 0-0 of 0</span>
+                        <div class="table-pagination-controls">
+                            <button class="table-page-btn" id="details-page-prev" type="button" onclick="changeDetailsPage(-1)">Prev</button>
+                            <span class="table-page-current" id="details-page-current">1 / 1</span>
+                            <button class="table-page-btn" id="details-page-next" type="button" onclick="changeDetailsPage(1)">Next</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1202,24 +2665,22 @@
         <!-- Favorites View -->
         <main class="config-area" id="favorites-view" style="display: none;">
             <div class="panel">
-                <div class="panel-header">
-                    <span class="panel-icon">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
-                    </span>
-                    <h2>Favorites</h2>
-                    <div class="panel-actions">
-                        <button class="action-btn" onclick="loadFavorites()">REFRESH</button>
-                    </div>
-                </div>
                 <div class="panel-body">
+                    <div class="view-header">
+                        <div class="view-header-title">FAVORITES</div>
+                        <div class="view-header-desc">Track and revisit the plugins you bookmarked for deeper analysis.</div>
+                    </div>
                     <div class="history-table-container">
-                        <table class="history-table">
+                        <table class="favorites-table">
                             <thead>
                                 <tr>
-                                    <th>SLUG</th>
-                                    <th>VERSION</th>
-                                    <th>SCORE</th>
-                                    <th>ACTIONS</th>
+                                    <th class="favorites-col-slug">PLUGIN</th>
+                                    <th class="favorites-col-version">VERSION</th>
+                                    <th class="favorites-col-installs">INSTALLS</th>
+                                    <th class="favorites-col-score">RISK SCORE</th>
+                                    <th class="favorites-col-updated">UPDATED</th>
+                                    <th class="favorites-col-mode">MODE</th>
+                                    <th class="favorites-col-actions">ACTIONS</th>
                                 </tr>
                             </thead>
                             <tbody id="favorites-list"></tbody>
@@ -1229,18 +2690,71 @@
             </div>
         </main>
 
+        <!-- Plugin Detail View -->
+        <main class="config-area" id="plugin-detail-view" style="display: none;">
+            <div class="panel">
+                <div class="panel-body plugin-detail-shell">
+                    <div class="view-header view-header-with-actions">
+                        <div class="view-header-title" id="plugin-page-title">PLUGIN DETAILS</div>
+                        <div class="view-header-desc" id="plugin-page-desc">Detailed metadata and Semgrep analysis for the selected target.</div>
+                        <div class="details-bulk-buttons">
+                            <button class="action-btn details-toolbar-btn-secondary" type="button" onclick="closeModal()">Back</button>
+                        </div>
+                    </div>
+
+                    <div class="plugin-detail-layout">
+                        <section class="plugin-detail-main" id="plugin-page-content"></section>
+
+                        <aside class="plugin-ai-panel" aria-label="AI Chat">
+                            <div class="plugin-ai-head">
+                                <h3>AI Chat</h3>
+                                <span class="plugin-ai-badge">Coming Soon</span>
+                            </div>
+
+                            <div class="plugin-ai-hero">
+                                <div class="plugin-ai-hero-icon">✦</div>
+                                <h4>How can AI assist?</h4>
+                                <p>Context-aware help for plugin risk review, finding triage, and remediation suggestions.</p>
+                            </div>
+
+                            <div class="plugin-ai-messages" id="plugin-ai-messages">
+                                <div class="plugin-ai-message assistant">
+                                    <strong>Craft Agent</strong>
+                                    <p>Ask about this plugin's risk profile and Semgrep findings.</p>
+                                </div>
+                                <div class="plugin-ai-message assistant">
+                                    <strong>Example</strong>
+                                    <p>“Summarize top 3 risky findings and propose secure code fixes.”</p>
+                                </div>
+                            </div>
+
+                            <div class="plugin-ai-pills">
+                                <button type="button" class="plugin-ai-pill" disabled>Top risks</button>
+                                <button type="button" class="plugin-ai-pill" disabled>Fix suggestions</button>
+                                <button type="button" class="plugin-ai-pill" disabled>Explain finding</button>
+                            </div>
+
+                            <div class="plugin-ai-bottom">
+                                <div class="plugin-ai-status">AI will be enabled in a future update.</div>
+                                <div class="plugin-ai-input-wrap plugin-ai-composer">
+                                    <textarea id="plugin-ai-input" placeholder="Ask AI anything about this plugin..." disabled></textarea>
+                                    <button class="action-btn plugin-ai-send" type="button" disabled>Send</button>
+                                </div>
+                            </div>
+                        </aside>
+                    </div>
+                </div>
+            </div>
+        </main>
+
         <!-- Semgrep Rules View -->
         <main class="config-area" id="semgrep-view" style="display: none;">
             <div class="panel">
-                <div class="panel-header">
-                    <span class="panel-icon">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
-                        </svg>
-                    </span>
-                    <h2>Semgrep Security Rules</h2>
-                </div>
                 <div class="panel-body">
+                    <div class="view-header">
+                        <div class="view-header-title">SEMGREP RULES</div>
+                        <div class="view-header-desc">Manage active rulesets and custom static analysis rules for deep scans.</div>
+                    </div>
                     <!-- Info Banner -->
                     <div style="background: linear-gradient(135deg, rgba(0, 255, 157, 0.1), rgba(0, 243, 255, 0.05)); border: 1px solid rgba(0, 255, 157, 0.2); border-radius: 6px; padding: 20px; margin-bottom: 25px;">
                         <div style="display: flex; align-items: flex-start; gap: 15px;">
@@ -1323,18 +2837,7 @@
         </div>
     </div>
 
-    <!-- Details Modal -->
-    <div class="modal-overlay" id="plugin-modal">
-        <div class="modal">
-            <div class="modal-header">
-                <h3 id="modal-title">Plugin Details</h3>
-                <button class="modal-close" onclick="closeModal()">×</button>
-            </div>
-            <div class="modal-body" id="modal-content">
-                <!-- Content injected via JS -->
-            </div>
-        </div>
-    </div>
+    <!-- Plugin details now render in dedicated page: #plugin-detail-view -->
 
     <script src="assets/js/app.js?v=9"></script>
 </body>

@@ -329,21 +329,11 @@ async def run_bulk_semgrep_task(
 
             logger.info(f"Bulk scan [{i + 1}/{len(plugins)}]: {slug}")
 
-            # Check if already scanned
-            existing = repo.get_semgrep_scan(slug)
-            if existing and existing["status"] == "completed":
-                continue
-
             try:
-                # Create scan record if not exists
-                if not existing:
-                    scan_id = repo.create_semgrep_scan(slug, version=version)
-                else:
-                    scan_id = existing["id"]
-                    if existing["status"] in ["failed", "pending"]:
-                        repo.update_semgrep_scan(scan_id, "pending")
-                    else:
-                        continue  # Skip running/completed
+                # Always create a fresh scan record for bulk runs.
+                # This prevents stale historical statuses (e.g. an old 'running' row)
+                # from overriding the latest UI state.
+                scan_id = repo.create_semgrep_scan(slug, version=version)
 
                 # Run scan with stop event support
                 await run_plugin_semgrep_scan(
@@ -366,7 +356,7 @@ async def run_bulk_semgrep_task(
 
 
 @router.post("/scan")
-@limiter.limit("10/minute")
+@limiter.limit("5000/minute")
 async def start_semgrep_scan(
     request: Request, scan_request: DownloadRequest, background_tasks: BackgroundTasks
 ):

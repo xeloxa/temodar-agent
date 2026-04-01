@@ -68,7 +68,25 @@ remove_container() {
 }
 
 build_image() {
+  local old_image_id=""
+  local new_image_id=""
+
+  old_image_id="$(docker image inspect --format '{{.Id}}' "${IMAGE_NAME}" 2>/dev/null || true)"
   docker build -t "${IMAGE_NAME}" .
+  new_image_id="$(docker image inspect --format '{{.Id}}' "${IMAGE_NAME}" 2>/dev/null || true)"
+
+  if [[ -n "${old_image_id}" && -n "${new_image_id}" && "${old_image_id}" != "${new_image_id}" ]]; then
+    docker rmi "${old_image_id}" >/dev/null 2>&1 || true
+  fi
+}
+
+ensure_image_exists() {
+  if docker image inspect "${IMAGE_NAME}" >/dev/null 2>&1; then
+    printf "${BOLD}${GREEN}Docker image already exists, skipping build.${RESET}\n"
+  else
+    printf "${BOLD}${YELLOW}Docker image not found, building...${RESET}\n"
+    build_image
+  fi
 }
 
 start_container() {
@@ -95,7 +113,7 @@ restart_everything() {
   printf "${BOLD}${GREEN}Restart completed.${RESET}\n"
 }
 
-build_image
+ensure_image_exists
 remove_container
 start_container
 

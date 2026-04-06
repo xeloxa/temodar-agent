@@ -1,15 +1,19 @@
 import json
+import os
 from pathlib import Path
 from typing import Any, Dict
 
 from ai.tool_policy import build_tool_policy
 
+# Keys that are safe to include in the bridge JSON payload.
+# NOTE: apiKey is intentionally excluded to prevent credential leakage
+# through logs, crash dumps, or error messages. The runner process
+# receives the API key via the TEMODAR_AI_API_KEY environment variable.
 RUNNER_ALLOWED_KEYS = {
     "workspaceRoot",
     "prompt",
     "model",
     "provider",
-    "apiKey",
     "baseUrl",
     "systemPrompt",
     "maxTurns",
@@ -105,6 +109,12 @@ def build_bridge_payload(
     trace_enabled: bool = True,
 ) -> Dict[str, Any]:
     del source_dir
+
+    # Pass API key via environment variable to prevent accidental logging.
+    api_key = active_provider.get("api_key") or ""
+    if api_key:
+        os.environ["TEMODAR_AI_API_KEY"] = str(api_key)
+
     bridge_payload: Dict[str, Any] = {
         "workspaceRoot": str(workspace_root.resolve()),
         "prompt": prompt,
@@ -125,7 +135,6 @@ def build_bridge_payload(
         "sharedMemory": True,
         "traceEnabled": bool(trace_enabled),
         "contextSummary": context_summary or None,
-        "apiKey": active_provider.get("api_key") or None,
         "baseUrl": active_provider.get("base_url") or None,
         "maxTurns": active_provider.get("max_turns") or None,
         "maxTokens": active_provider.get("max_tokens") or None,

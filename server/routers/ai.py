@@ -273,7 +273,26 @@ def decide_run_approval(run_id: int, payload: AIRunApprovalDecisionRequest):
     control_path = str(approval.get("control_path") or "").strip()
     if not control_path:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Approval control path is missing.")
-    control_file = Path(control_path)
+    control_file = Path(control_path).resolve()
+
+    # Defense-in-depth: validate the control file is within the expected
+    # approvals directory to prevent path traversal via DB manipulation.
+    APPROVALS_DIR_NAME = ".temodar-ai-approvals"
+    if APPROVALS_DIR_NAME not in control_file.parts:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid approval control path.",
+        )
+    # Ensure no directory escape from the approvals subdirectory
+    approvals_anchor = control_file
+    while approvals_anchor.name != APPROVALS_DIR_NAME and approvals_anchor != approvals_anchor.parent:
+        approvals_anchor = approvals_anchor.parent
+    if approvals_anchor.name != APPROVALS_DIR_NAME:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid approval control path.",
+        )
+
     control_file.parent.mkdir(parents=True, exist_ok=True)
     control_file.write_text(json.dumps({"decision": payload.decision}), encoding="utf-8")
     updated = repo.upsert_run_approval(

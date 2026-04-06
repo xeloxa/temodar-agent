@@ -396,16 +396,33 @@ class SemgrepScanner:
             )
 
         target.output_file.parent.mkdir(parents=True, exist_ok=True)
-        result = subprocess.run(
+
+        # Use Popen for cooperative cancellation support and resource limits.
+        process = subprocess.Popen(
             self._build_scan_command(target),
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=SEMGREP_TIMEOUT_SECONDS,
         )
+        try:
+            stdout, stderr = process.communicate(timeout=SEMGREP_TIMEOUT_SECONDS)
+            # Enforce output size cap to prevent memory exhaustion.
+            MAX_OUTPUT_SIZE = 10 * 1024 * 1024  # 10 MB
+            if len(stdout) > MAX_OUTPUT_SIZE:
+                stdout = stdout[:MAX_OUTPUT_SIZE]
+            if len(stderr) > MAX_OUTPUT_SIZE:
+                stderr = stderr[:MAX_OUTPUT_SIZE]
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+            return SemgrepExecutionResult(
+                findings=[], errors=["Scan timeout"], success=False,
+            )
+
         return self._parse_subprocess_result(
             output_file=target.output_file,
-            returncode=result.returncode,
-            stderr=result.stderr,
+            returncode=process.returncode,
+            stderr=stderr,
         )
 
     def scan_plugin(self, plugin_path: str, slug: str) -> SemgrepResult:

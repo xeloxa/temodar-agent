@@ -5,16 +5,20 @@ REST API and WebSocket endpoints for the web dashboard.
 """
 
 import logging
+import os
+import secrets
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi.errors import RateLimitExceeded
-from starlette.responses import PlainTextResponse
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import PlainTextResponse, Response
 
 from app_meta import __version__
 from server import update_manager
@@ -27,6 +31,12 @@ ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
 ALLOWED_HOST_SET = set(ALLOWED_HOSTS)
 STATIC_DIR = Path(__file__).parent / "static"
 
+# Auth token: read from env or generate a random one on first startup.
+_AUTH_TOKEN = os.environ.get("TEMODAR_AUTH_TOKEN", "").strip()
+# Paths that do NOT require authentication (static assets, health, root page).
+_PUBLIC_PATH_PREFIXES = ("/static", "/assets", "/docs", "/openapi.json", "/redoc")
+_PUBLIC_EXACT_PATHS = {"/", "/health"}
+
 
 def rate_limit_exceeded_handler(request: Request, exc: Exception):
     """Custom rate limit exceeded handler."""
@@ -34,6 +44,57 @@ def rate_limit_exceeded_handler(request: Request, exc: Exception):
         "Rate limit exceeded. Please try again later.",
         status_code=429,
     )
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Add security headers to all responses."""
+
+    async def dispatch(self, request: Request, call_next):
+        response: Response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+            "connect-src 'self' ws://localhost:* wss://localhost:*;"
+        )
+        return response
+
+
+class AuthMiddleware(BaseHTTPMiddleware):
+    """Bearer token authentication for API endpoints.
+
+    When TEMODAR_AUTH_TOKEN is set, all /api/* endpoints require
+    Authorization: Bearer <token>.  Static assets and the root page
+    are exempt so the dashboard can still load.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        if not _AUTH_TOKEN:
+            # No token configured — skip auth (local-only default)
+            return await call_next(request)
+
+        path = request.url.path
+
+        # Allow public paths through without auth
+        if path in _PUBLIC_EXACT_PATHS:
+            return await call_next(request)
+        if any(path.startswith(prefix) for prefix in _PUBLIC_PATH_PREFIXES):
+            return await call_next(request)
+
+        # All /api/* and /ws/* paths require auth
+        auth_header = request.headers.get("authorization", "")
+        if not auth_header.startswith("Bearer "):
+            return PlainTextResponse("Unauthorized", status_code=401)
+
+        provided_token = auth_header[7:]
+        if not secrets.compare_digest(provided_token, _AUTH_TOKEN):
+            return PlainTextResponse("Forbidden", status_code=403)
+
+        return await call_next(request)
 
 
 def setup_logging():
@@ -70,7 +131,26 @@ def configure_application(app: FastAPI) -> None:
     app.state.update_manager = update_manager.manager
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+
+    # Security middlewares (order matters: outermost runs first)
+    app.add_middleware(SecurityHeadersMiddleware)
+    app.add_middleware(AuthMiddleware)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=ALLOWED_HOSTS)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:*", "http://127.0.0.1:*"],
+        allow_methods=["GET", "POST", "PATCH", "DELETE"],
+        allow_headers=["Authorization", "Content-Type"],
+        allow_credentials=False,
+    )
+
+    if _AUTH_TOKEN:
+        logger.info("Authentication enabled (TEMODAR_AUTH_TOKEN is set)")
+    else:
+        logger.warning(
+            "Authentication DISABLED. Set TEMODAR_AUTH_TOKEN env var to enable."
+        )
+
     warmup_update_manager()
     register_routers(app)
     mount_static_directories(app, STATIC_DIR)
@@ -140,9 +220,13 @@ def register_scan_websocket(app: FastAPI) -> None:
 
 
 def is_allowed_websocket_origin(origin: str | None) -> bool:
-    """Validate WebSocket origin against local-only host policy."""
+    """Validate WebSocket origin against local-only host policy.
+
+    Rejects connections without an Origin header to prevent
+    non-browser clients from bypassing origin checks.
+    """
     if not origin:
-        return True
+        return False
     try:
         origin_host = (urlparse(origin).hostname or "").lower()
     except Exception:

@@ -1,8 +1,14 @@
 import json
+import logging
 from urllib import error as urllib_error
 from urllib import request as urllib_request
 
 from fastapi import HTTPException, status
+
+logger = logging.getLogger("temodar_agent.ai.provider")
+
+# Maximum length of provider error detail reflected to the client.
+_MAX_ERROR_DETAIL_LENGTH = 200
 
 TEST_PROMPT = "Reply with exactly OK."
 TEST_TIMEOUT_SECONDS = 20
@@ -35,16 +41,24 @@ def post_json(url: str, *, headers: dict[str, str], body: dict, timeout: int = T
             raw_response = response.read().decode("utf-8")
             return json.loads(raw_response) if raw_response else {}
     except urllib_error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="ignore").strip()
+        raw_detail = exc.read().decode("utf-8", errors="ignore").strip()
+        # Log the full error server-side for debugging.
+        logger.warning(
+            "Provider HTTP %d error: %s", exc.code, raw_detail[:500]
+        )
+        # Sanitize: truncate and strip potentially sensitive info before
+        # reflecting to the client.
+        safe_detail = raw_detail[:_MAX_ERROR_DETAIL_LENGTH] if raw_detail else ""
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=detail or f"Provider returned HTTP {exc.code}.",
+            detail=safe_detail or f"Provider returned HTTP {exc.code}.",
         ) from exc
     except urllib_error.URLError as exc:
         reason = getattr(exc, "reason", exc)
+        logger.warning("Provider connection failed: %s", reason)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Connection failed: {reason}",
+            detail="Connection to AI provider failed.",
         ) from exc
     except TimeoutError as exc:
         raise HTTPException(

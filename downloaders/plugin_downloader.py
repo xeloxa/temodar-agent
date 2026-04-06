@@ -12,8 +12,10 @@ import shutil
 import socket
 import zipfile
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional, Tuple
 from urllib.parse import urljoin, urlparse
+
+from requests.adapters import HTTPAdapter
 
 from infrastructure.http_client import get_session
 
@@ -55,9 +57,12 @@ class PluginDownloader:
         ):
             raise ValueError("Path traversal detected")
 
-    def _validate_url(self, url: str) -> None:
+    def _validate_url(self, url: str) -> Tuple[str, List[str]]:
         """
-        Validate URL to prevent SSRF attacks.
+        Validate URL to prevent SSRF attacks and return validated IPs.
+
+        Returns:
+            Tuple of (hostname, list_of_validated_ip_strings)
 
         Blocks:
         - Non-HTTP(S) schemes
@@ -85,9 +90,10 @@ class PluginDownloader:
         }
         if hostname.lower() in blocked_hostnames:
             raise ValueError(
-                f"SSRF Protection: Access to cloud metadata endpoint is blocked"
+                "SSRF Protection: Access to cloud metadata endpoint is blocked"
             )
 
+        validated_ips: List[str] = []
         try:
             # Resolve all addresses (IPv4 + IPv6) to prevent dual-stack bypass.
             addr_infos = socket.getaddrinfo(hostname, None)
@@ -136,8 +142,15 @@ class PluginDownloader:
                         "SSRF Protection: Access to IPv6 localhost is blocked"
                     )
 
+                validated_ips.append(ip_str)
+
         except socket.gaierror:
             raise ValueError(f"Could not resolve hostname: {hostname}")
+
+        if not validated_ips:
+            raise ValueError(f"No valid IP addresses resolved for: {hostname}")
+
+        return hostname, validated_ips
 
     def _validate_zip_archive(self, zip_ref: zipfile.ZipFile) -> None:
         """Validate ZIP to reduce zip-bomb and archive abuse risks."""
@@ -164,20 +177,62 @@ class PluginDownloader:
         if total_uncompressed > self.MAX_TOTAL_UNCOMPRESSED_SIZE:
             raise ValueError("ZIP archive uncompressed size exceeds safety limits")
 
+    def _create_pinned_session(self, hostname: str, validated_ips: List[str]):
+        """Create a requests session that pins DNS to pre-validated IPs.
+
+        This prevents TOCTOU DNS rebinding attacks by forcing the HTTP
+        library to connect only to IPs that passed SSRF validation.
+        """
+        pinned_ip = validated_ips[0]
+
+        class PinnedAdapter(HTTPAdapter):
+            """HTTP adapter that forces connections to a pre-resolved IP."""
+
+            def __init__(self, pinned_host: str, pinned_addr: str, **kwargs):
+                self._pinned_host = pinned_host
+                self._pinned_addr = pinned_addr
+                super().__init__(**kwargs)
+
+            def send(self, request, **kwargs):
+                # Rewrite the URL to use the pinned IP while preserving
+                # the Host header for TLS SNI and virtual hosting.
+                parsed = urlparse(request.url)
+                if parsed.hostname == self._pinned_host:
+                    pinned_url = request.url.replace(
+                        f"://{self._pinned_host}",
+                        f"://{self._pinned_addr}",
+                        1,
+                    )
+                    request.url = pinned_url
+                    request.headers["Host"] = self._pinned_host
+                return super().send(request, **kwargs)
+
+        # Create an independent session so we don't mutate the shared one.
+        import requests as _requests
+        pinned_session = _requests.Session()
+        adapter = PinnedAdapter(hostname, pinned_ip)
+        pinned_session.mount("https://", adapter)
+        pinned_session.mount("http://", adapter)
+        return pinned_session
+
     def _download_zip_with_validated_redirects(self, *, session, download_url: str, zip_path: Path) -> None:
         current_url = download_url
         final_response = None
+        # Track the pinned session for the initial hostname.
+        active_session = session
 
         for _ in range(self.MAX_REDIRECTS):
-            self._validate_url(current_url)
-            response = session.get(
+            hostname, validated_ips = self._validate_url(current_url)
+            # Pin DNS to validated IPs to prevent TOCTOU rebinding.
+            active_session = self._create_pinned_session(hostname, validated_ips)
+            response = active_session.get(
                 current_url,
                 stream=True,
                 timeout=60,
                 allow_redirects=False,
             )
             if response.is_redirect:
-                location = response.headers["Location"]
+                location = response.headers.get("Location", "")
                 current_url = (
                     urljoin(current_url, location)
                     if not urlparse(location).netloc

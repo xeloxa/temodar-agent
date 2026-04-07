@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/Docker-Required-2496ED?logo=docker&logoColor=white" alt="Docker Required">
   <img src="https://img.shields.io/badge/Backend-FastAPI-009688?logo=fastapi&logoColor=white" alt="FastAPI">
   <img src="https://img.shields.io/badge/Analysis-AI--Agent%20%2B%20Semgrep-FF6B35" alt="AI-Agent + Semgrep">
-  <img src="https://img.shields.io/badge/License-MIT-green" alt="License MIT">
+  <img src="https://img.shields.io/badge/License-Apache%202.0-green" alt="License Apache 2.0">
   <img src="https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-lightgrey" alt="Platform">
 </p>
 
@@ -176,8 +176,8 @@ Useful links:
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/xeloxa/WP-Hunter.git
-cd WP-Hunter
+git clone https://github.com/xeloxa/temodar-agent.git
+cd temodar-agent
 ```
 
 ### 2. Start Temodar Agent
@@ -186,6 +186,20 @@ cd WP-Hunter
 chmod +x run.sh
 ./run.sh
 ```
+
+### Install a specific version
+
+If you want to run a specific released version, clone the repository at the desired tag:
+
+```bash
+git clone --branch v0.1.0 --depth 1 https://github.com/xeloxa/temodar-agent.git
+cd temodar-agent
+```
+
+Replace `v0.1.0` with the release tag you want to use.
+
+> **Note**
+> Clone the project with `git` instead of downloading a release ZIP if you want the UI update flow to work correctly. The in-app Docker update mechanism expects the workspace to be a valid git checkout.
 
 The launcher script automatically:
 - builds the Docker image if needed
@@ -224,11 +238,11 @@ While `run.sh` is active:
 ## Star History
 
 <p align="center">
-  <a href="https://www.star-history.com/#xeloxa/WP-Hunter&type=Date&legend=top-left">
+  <a href="https://www.star-history.com/#xeloxa/temodar-agent&type=Date&legend=top-left">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=xeloxa/WP-Hunter&type=Date&theme=dark&legend=top-left" />
-      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=xeloxa/WP-Hunter&type=Date&legend=top-left" />
-      <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=xeloxa/WP-Hunter&type=Date&theme=dark&legend=top-left" />
+      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=xeloxa/temodar-agent&type=Date&theme=dark&legend=top-left" />
+      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=xeloxa/temodar-agent&type=Date&legend=top-left" />
+      <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=xeloxa/temodar-agent&type=Date&theme=dark&legend=top-left" />
     </picture>
   </a>
 </p>

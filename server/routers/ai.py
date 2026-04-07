@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, status
@@ -273,7 +274,25 @@ def decide_run_approval(run_id: int, payload: AIRunApprovalDecisionRequest):
     control_path = str(approval.get("control_path") or "").strip()
     if not control_path:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Approval control path is missing.")
-    control_file = Path(control_path)
+
+    workspace_path = str(run.get("workspace_path") or "").strip()
+    if not workspace_path:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Run workspace is missing.")
+
+    control_file = Path(control_path).resolve()
+    expected_approvals_dir = (Path(workspace_path).resolve() / ".temodar-ai-approvals").resolve()
+    try:
+        if os.path.commonpath([str(expected_approvals_dir), str(control_file)]) != str(expected_approvals_dir):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid approval control path.",
+            )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid approval control path.",
+        ) from exc
+
     control_file.parent.mkdir(parents=True, exist_ok=True)
     control_file.write_text(json.dumps({"decision": payload.decision}), encoding="utf-8")
     updated = repo.upsert_run_approval(

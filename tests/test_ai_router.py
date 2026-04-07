@@ -246,6 +246,7 @@ def test_create_message_workspace_mode_builds_bridge_payload(monkeypatch, tmp_pa
     assert captured_payload["teamMode"] == "single_agent"
     assert captured_payload["workspaceRoot"].endswith("/Plugins/akismet/source")
     assert captured_payload["needsTools"] is True
+    assert captured_payload["runtimeEnv"]["TEMODAR_AI_API_KEY"] == "test-key"
     assert 'Temodar Agent' in captured_payload["systemPrompt"]
 
 
@@ -547,7 +548,7 @@ def test_run_approval_endpoint_rejects_pending_run(monkeypatch, tmp_path):
         workspace_path=str(tmp_path),
     )
 
-    control_file = tmp_path / "approval" / "decision.json"
+    control_file = tmp_path / ".temodar-ai-approvals" / "decision.json"
     repository.upsert_run_approval(
         run_id=run["id"],
         thread_id=thread["id"],
@@ -583,6 +584,39 @@ def test_run_approval_endpoint_returns_404_for_missing_run(monkeypatch, tmp_path
 
     assert response.status_code == 404
     assert response.json()["detail"] == "AI run not found."
+
+
+def test_run_approval_endpoint_rejects_control_path_outside_workspace(monkeypatch, tmp_path):
+    db_path = tmp_path / "ai_router.db"
+    repository = AIRepository(db_path=db_path)
+    thread = repository.get_or_create_thread(plugin_slug="akismet", is_theme=False)
+    run = repository.create_run(
+        thread_id=thread["id"],
+        provider="anthropic",
+        provider_label="Anthropic",
+        model="claude",
+        status="running",
+        workspace_path=str(tmp_path / "workspace"),
+    )
+
+    bad_control_file = tmp_path / "somewhere-else" / ".temodar-ai-approvals" / "decision.json"
+    repository.upsert_run_approval(
+        run_id=run["id"],
+        thread_id=thread["id"],
+        status="pending",
+        mode="manual",
+        control_path=str(bad_control_file),
+        request_payload={"nextTasks": [{"id": "t1", "title": "inspect"}]},
+    )
+
+    client = _create_test_client(monkeypatch, db_path)
+    response = client.post(
+        f"/api/ai/runs/{run['id']}/approval",
+        json={"plugin_slug": "akismet", "is_theme": False, "decision": "approved"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Invalid approval control path."
 
 
 def test_update_thread_requires_valid_scope(monkeypatch, tmp_path):

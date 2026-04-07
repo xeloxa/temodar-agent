@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from ai.runtime_bridge import _build_child_env, _payload_without_runtime_env
 from server.routers.ai_bridge_service import build_bridge_payload, build_system_prompt
 
 
@@ -77,6 +78,7 @@ def test_build_bridge_payload_filters_unsupported_custom_fields():
     assert payload["provider"] == "anthropic"
     assert payload["needsTools"] is True
     assert payload["traceEnabled"] is True
+    assert payload["runtimeEnv"]["TEMODAR_AI_API_KEY"] == "secret"
     assert "loopDetection" not in payload
     assert "toolPolicy" not in payload
     assert "workingDirectory" not in payload
@@ -123,3 +125,18 @@ def test_build_bridge_payload_passes_supported_runtime_overrides():
     assert payload["tasks"][0]["title"] == "Inspect source"
     assert payload["fanout"]["analysts"][0]["name"] == "optimist"
     assert payload["loopDetection"]["onLoopDetected"] == "warn"
+
+
+def test_runtime_env_is_scoped_to_child_process(monkeypatch):
+    monkeypatch.setenv("TEMODAR_AI_API_KEY", "stale")
+    payload = {
+        "provider": "openai",
+        "runtimeEnv": {"TEMODAR_AI_API_KEY": "fresh", "EXTRA_FLAG": "1"},
+    }
+
+    child_env = _build_child_env(payload)
+    sanitized_payload = _payload_without_runtime_env(payload)
+
+    assert child_env["TEMODAR_AI_API_KEY"] == "fresh"
+    assert child_env["EXTRA_FLAG"] == "1"
+    assert "runtimeEnv" not in sanitized_payload

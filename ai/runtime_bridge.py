@@ -1,4 +1,5 @@
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -40,11 +41,35 @@ def _parse_bridge_event_line(raw_line: str) -> Dict[str, Any]:
 
 
 
+def _build_child_env(payload: Dict[str, Any]) -> Dict[str, str]:
+    child_env = os.environ.copy()
+    child_env.pop("TEMODAR_AI_API_KEY", None)
+
+    runtime_env = payload.get("runtimeEnv") or {}
+    if isinstance(runtime_env, dict):
+        for key, value in runtime_env.items():
+            if value is None:
+                child_env.pop(str(key), None)
+            else:
+                child_env[str(key)] = str(value)
+    return child_env
+
+
+
+def _payload_without_runtime_env(payload: Dict[str, Any]) -> Dict[str, Any]:
+    sanitized = dict(payload)
+    sanitized.pop("runtimeEnv", None)
+    return sanitized
+
+
+
 def run_agent_bridge_stream(
     payload: Dict[str, Any],
     timeout_seconds: int = DEFAULT_BRIDGE_TIMEOUT_SECONDS,
 ) -> Iterator[Dict[str, Any]]:
     _validate_bridge_environment()
+    child_env = _build_child_env(payload)
+    safe_payload = _payload_without_runtime_env(payload)
 
     try:
         process = subprocess.Popen(
@@ -53,6 +78,7 @@ def run_agent_bridge_stream(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            env=child_env,
         )
     except OSError as exc:
         raise BridgeError(f"AI agent bridge failed to start: {exc}") from exc
@@ -61,7 +87,7 @@ def run_agent_bridge_stream(
         if process.stdin is None or process.stdout is None:
             raise BridgeError("AI agent bridge failed to initialize stdio pipes.")
 
-        process.stdin.write(json.dumps(payload))
+        process.stdin.write(json.dumps(safe_payload))
         process.stdin.close()
 
         completed_event_seen = False

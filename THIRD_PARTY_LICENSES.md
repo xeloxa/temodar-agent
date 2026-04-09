@@ -1,12 +1,12 @@
 # Third-Party Licenses
 
-This project is licensed under the MIT License (`LICENSE`).
+This project is licensed under the Apache License, Version 2.0 (`LICENSE`).
 
 Temodar Agent integrates third-party tools and dependencies. Their licenses remain in effect for their respective components.
 
 ## Temodar Agent (Main Project)
 
-- License: MIT
+- License: Apache License 2.0
 - License file: `LICENSE`
 
 ## Semgrep
@@ -29,7 +29,7 @@ If you redistribute Semgrep binaries or modified Semgrep code as part of another
 
 Temodar Agent Docker image copies license artifacts into `/licenses`:
 
-- `/licenses/Temodar Agent-MIT.txt`
+- `/licenses/Temodar-Agent-Apache-2.0.txt`
 - `/licenses/THIRD_PARTY_LICENSES.md`
 - `/licenses/LGPL-2.1.txt`
 - `/licenses/SEMGREP_SOURCE_NOTICE.txt`

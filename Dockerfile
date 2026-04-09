@@ -23,7 +23,7 @@ COPY . .
 RUN npm --prefix /app/ai/node_runner ci && npm --prefix /app/ai/node_runner run build
 
 RUN mkdir -p /licenses && \
-    cp /app/LICENSE /licenses/Temodar-Agent-MIT.txt && \
+    cp /app/LICENSE /licenses/Temodar-Agent-Apache-2.0.txt && \
     cp /app/THIRD_PARTY_LICENSES.md /licenses/THIRD_PARTY_LICENSES.md && \
     cp /app/licenses/LGPL-2.1.txt /licenses/LGPL-2.1.txt && \
     cp /app/licenses/SEMGREP_SOURCE_NOTICE.txt /licenses/SEMGREP_SOURCE_NOTICE.txt

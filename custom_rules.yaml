@@ -1,0 +1,752 @@
+---
+rules:
+- id: wp-sql-injection
+  languages:
+  - php
+  severity: CRITICAL
+  message: 'SQL Injection: User-controlled input is passed into WordPress database queries via $wpdb without using $wpdb->prepare(). This can allow attackers to execute arbitrary SQL. Use $wpdb->prepare() and parameterized queries.'
+  metadata:
+    owasp: A03:2021 Injection
+    cwe: 'CWE-89: SQL Injection'
+    confidence: HIGH
+    impact: CRITICAL
+    references:
+    - https://developer.wordpress.org/reference/classes/wpdb/prepare/
+  mode: taint
+  pattern-sources:
+  - pattern-either:
+    - pattern: "$_GET"
+    - pattern: "$_POST"
+    - pattern: "$_REQUEST"
+    - pattern: "$_COOKIE"
+    - pattern: "$_SERVER"
+    - pattern: file_get_contents("php://input")
+  pattern-sinks:
+  - pattern-either:
+    - pattern: "$wpdb->query(...)"
+    - pattern: "$wpdb->get_results(...)"
+    - pattern: "$wpdb->get_row(...)"
+    - pattern: "$wpdb->get_var(...)"
+    - pattern: "$wpdb->get_col(...)"
+  pattern-sanitizers:
+  - pattern-either:
+    - pattern: "$wpdb->prepare(...)"
+    - pattern: intval(...)
+    - pattern: absint(...)
+    - pattern: "(int)$X"
+    - pattern: "(float)$X"
+    - pattern: "(bool)$X"
+    - pattern: esc_sql(...)
+    - pattern: sanitize_key(...)
+    - pattern: sanitize_sql_orderby(...)
+    - pattern: array_map("intval", ...)
+    - pattern: array_map("absint", ...)
+    - pattern: like_escape(...)
+- id: wp-xss-echo-output
+  languages:
+  - php
+  severity: HIGH
+  message: 'Cross-Site Scripting (XSS): User-controlled input is written to HTML output via echo/print/printf without proper escaping. Use esc_html(), esc_attr(), esc_url(), wp_kses(), etc. before outputting data.'
+  metadata:
+    owasp: A03:2021 Injection
+    cwe: 'CWE-79: Cross-site Scripting'
+    confidence: HIGH
+    impact: HIGH
+    references:
+    - https://developer.wordpress.org/apis/security/escaping/
+  mode: taint
+  pattern-sources:
+  - pattern-either:
+    - pattern: "$_GET"
+    - pattern: "$_POST"
+    - pattern: "$_REQUEST"
+    - pattern: "$_COOKIE"
+    - pattern: "$_SERVER"
+    - pattern: file_get_contents("php://input")
+  pattern-sinks:
+  - pattern-either:
+    - pattern: echo ...;
+    - pattern: print(...);
+    - pattern: printf(...);
+    - pattern: vprintf(...);
+  pattern-sanitizers:
+  - pattern-either:
+    - pattern: esc_html(...)
+    - pattern: esc_attr(...)
+    - pattern: esc_url(...)
+    - pattern: esc_js(...)
+    - pattern: esc_textarea(...)
+    - pattern: wp_kses(...)
+    - pattern: wp_kses_post(...)
+    - pattern: wp_kses_data(...)
+    - pattern: sanitize_textarea_field(...)
+    - pattern: sanitize_email(...)
+    - pattern: sanitize_file_name(...)
+    - pattern: sanitize_html_class(...)
+    - pattern: sanitize_key(...)
+    - pattern: sanitize_url(...)
+    - pattern: sanitize_user(...)
+    - pattern: intval(...)
+    - pattern: absint(...)
+    - pattern: "(int)$X"
+    - pattern: "(float)$X"
+    - pattern: wp_strip_all_tags(...)
+    - pattern: htmlspecialchars(...)
+    - pattern: htmlentities(...)
+    - pattern: wp_json_encode(...)
+    - pattern: number_format(...)
+- id: wp-xss-attribute-output
+  languages:
+  - php
+  severity: HIGH
+  message: 'Cross-Site Scripting (XSS): User-controlled input is used in an HTML attribute context without proper escaping. Always use esc_attr() (and esc_url() for URLs) for attribute values.'
+  metadata:
+    owasp: A03:2021 Injection
+    cwe: 'CWE-79: Cross-site Scripting'
+    confidence: MEDIUM
+    impact: HIGH
+  mode: taint
+  pattern-sources:
+  - pattern-either:
+    - pattern: "$_GET"
+    - pattern: "$_POST"
+    - pattern: "$_REQUEST"
+    - pattern: "$_COOKIE"
+    - pattern: "$_SERVER"
+    - pattern: file_get_contents("php://input")
+  pattern-sinks:
+  - pattern-either:
+    - patterns:
+      - pattern: echo ...;
+      - pattern-regex: (value|href|src|action|data-[a-zA-Z0-9_-]+|class|id|style)\s*=\s*["'][^"']*
+  pattern-sanitizers:
+  - pattern-either:
+    - pattern: esc_attr(...)
+    - pattern: esc_url(...)
+    - pattern: esc_html(...)
+    - pattern: intval(...)
+    - pattern: absint(...)
+    - pattern: "(int)$X"
+    - pattern: "(float)$X"
+    - pattern: sanitize_text_field(...)
+    - pattern: sanitize_html_class(...)
+    - pattern: sanitize_url(...)
+    - pattern: htmlspecialchars(...)
+    - pattern: number_format(...)
+- id: wp-command-injection
+  languages:
+  - php
+  severity: CRITICAL
+  message: 'OS Command Injection: User-controlled input is passed into command execution functions without proper sanitization. This may allow arbitrary OS command execution. Use escapeshellarg()/escapeshellcmd() or safer alternatives.'
+  metadata:
+    owasp: A03:2021 Injection
+    cwe: 'CWE-78: OS Command Injection'
+    confidence: HIGH
+    impact: CRITICAL
+  mode: taint
+  pattern-sources:
+  - pattern-either:
+    - pattern: "$_GET"
+    - pattern: "$_POST"
+    - pattern: "$_REQUEST"
+    - pattern: "$_COOKIE"
+    - pattern: "$_SERVER"
+    - pattern: file_get_contents("php://input")
+  pattern-sinks:
+  - pattern-either:
+    - pattern: exec(...)
+    - pattern: system(...)
+    - pattern: passthru(...)
+    - pattern: shell_exec(...)
+    - pattern: popen(...)
+    - pattern: proc_open(...)
+    - pattern: pcntl_exec(...)
+    - pattern: "`...`"
+  pattern-sanitizers:
+  - pattern-either:
+    - pattern: escapeshellarg(...)
+    - pattern: escapeshellcmd(...)
+    - pattern: intval(...)
+    - pattern: absint(...)
+    - pattern: "(int)$X"
+- id: wp-code-injection
+  languages:
+  - php
+  severity: CRITICAL
+  message: 'Code Injection: User-controlled input is passed into dynamic code execution functions such as eval()/assert(). This can lead to remote code execution (RCE). Avoid eval() and do not execute user input as code.'
+  metadata:
+    owasp: A03:2021 Injection
+    cwe: 'CWE-94: Code Injection'
+    confidence: HIGH
+    impact: CRITICAL
+  mode: taint
+  pattern-sources:
+  - pattern-either:
+    - pattern: "$_GET"
+    - pattern: "$_POST"
+    - pattern: "$_REQUEST"
+    - pattern: "$_COOKIE"
+    - pattern: "$_SERVER"
+    - pattern: file_get_contents("php://input")
+  pattern-sinks:
+  - pattern-either:
+    - pattern: eval(...)
+    - pattern: assert(...)
+    - pattern: create_function(...)
+    - pattern: usort(..., $CALLBACK)
+    - pattern: uasort(..., $CALLBACK)
+    - pattern: uksort(..., $CALLBACK)
+  pattern-sanitizers:
+  - pattern-either:
+    - pattern: intval(...)
+    - pattern: absint(...)
+    - pattern: "(int)$X"
+    - pattern: sanitize_text_field(...)
+    - pattern: sanitize_key(...)
+- id: wp-file-inclusion
+  languages:
+  - php
+  severity: CRITICAL
+  message: 'Local/Remote File Inclusion: User-controlled input is directly passed into include/require. This may enable arbitrary file read or remote code execution. Use strict allowlists and validate file paths.'
+  metadata:
+    owasp: A03:2021 Injection
+    cwe: 'CWE-98: Improper Control of Filename for Include/Require'
+    confidence: HIGH
+    impact: CRITICAL
+  mode: taint
+  pattern-sources:
+  - pattern-either:
+    - pattern: "$_GET"
+    - pattern: "$_POST"
+    - pattern: "$_REQUEST"
+    - pattern: "$_COOKIE"
+    - pattern: "$_SERVER"
+    - pattern: file_get_contents("php://input")
+  pattern-sinks:
+  - pattern-either:
+    - pattern: include $SINK;
+    - pattern: include_once $SINK;
+    - pattern: require $SINK;
+    - pattern: require_once $SINK;
+    - pattern: include($SINK);
+    - pattern: include_once($SINK);
+    - pattern: require($SINK);
+    - pattern: require_once($SINK);
+  pattern-sanitizers:
+  - pattern-either:
+    - pattern: basename(...)
+    - pattern: realpath(...)
+    - pattern: sanitize_file_name(...)
+    - pattern: wp_normalize_path(...)
+    - pattern: intval(...)
+    - pattern: absint(...)
+- id: wp-object-injection
+  languages:
+  - php
+  severity: CRITICAL
+  message: 'Object Injection / Unsafe Deserialization: User-controlled input is passed into unserialize()/maybe_unserialize(). This can enable PHP object injection and potentially remote code execution (RCE). Prefer safe data formats (e.g., JSON) and never unserialize untrusted data.'
+  metadata:
+    owasp: A08:2021 Software and Data Integrity Failures
+    cwe: 'CWE-502: Deserialization of Untrusted Data'
+    confidence: HIGH
+    impact: CRITICAL
+  mode: taint
+  pattern-sources:
+  - pattern-either:
+    - pattern: "$_GET"
+    - pattern: "$_POST"
+    - pattern: "$_REQUEST"
+    - pattern: "$_COOKIE"
+    - pattern: "$_SERVER"
+    - pattern: file_get_contents("php://input")
+  pattern-sinks:
+  - pattern-either:
+    - pattern: unserialize(...)
+    - pattern: maybe_unserialize(...)
+  pattern-sanitizers:
+  - pattern-either:
+    - pattern: intval(...)
+    - pattern: absint(...)
+    - pattern: "(int)$X"
+    - pattern: sanitize_text_field(...)
+- id: wp-ssrf
+  languages:
+  - php
+  severity: HIGH
+  message: 'Server-Side Request Forgery (SSRF): User-controlled input is used as a URL in HTTP request functions. Attackers may access internal resources. Validate/allowlist URLs and prefer wp_safe_remote_* plus wp_http_validate_url().'
+  metadata:
+    owasp: A10:2021 Server-Side Request Forgery
+    cwe: 'CWE-918: Server-Side Request Forgery'
+    confidence: HIGH
+    impact: HIGH
+  mode: taint
+  pattern-sources:
+  - pattern-either:
+    - pattern: "$_GET"
+    - pattern: "$_POST"
+    - pattern: "$_REQUEST"
+    - pattern: "$_COOKIE"
+    - pattern: "$_SERVER"
+  pattern-sinks:
+  - pattern-either:
+    - pattern: wp_remote_get(...)
+    - pattern: wp_remote_post(...)
+    - pattern: wp_remote_head(...)
+    - pattern: wp_remote_request(...)
+    - pattern: curl_setopt($CH, CURLOPT_URL, ...)
+  pattern-sanitizers:
+  - pattern-either:
+    - pattern: esc_url(...)
+    - pattern: wp_http_validate_url(...)
+    - pattern: sanitize_url(...)
+- id: wp-open-redirect
+  languages:
+  - php
+  severity: MEDIUM
+  message: 'Open Redirect: User-controlled input is passed into redirect functions. Attackers may redirect users to malicious sites. Use wp_safe_redirect() and only allow approved hosts.'
+  metadata:
+    owasp: A01:2021 Broken Access Control
+    cwe: 'CWE-601: URL Redirection to Untrusted Site'
+    confidence: HIGH
+    impact: MEDIUM
+  mode: taint
+  pattern-sources:
+  - pattern-either:
+    - pattern: "$_GET"
+    - pattern: "$_POST"
+    - pattern: "$_REQUEST"
+    - pattern: "$_COOKIE"
+    - pattern: "$_SERVER"
+  pattern-sinks:
+  - pattern-either:
+    - pattern: wp_redirect(...)
+    - pattern-regex: '(?i)header\s*\(\s*["'']location\s*:'
+    - pattern: header($VAR)
+  pattern-sanitizers:
+  - pattern-either:
+    - pattern: wp_safe_redirect(...)
+    - pattern: wp_validate_redirect(...)
+    - pattern: esc_url(...)
+    - pattern: wp_sanitize_redirect(...)
+    - pattern: admin_url(...)
+    - pattern: home_url(...)
+    - pattern: site_url(...)
+    - pattern: network_home_url(...)
+- id: wp-path-traversal
+  languages:
+  - php
+  severity: HIGH
+  message: 'Path Traversal: User-controlled input is passed into file operations. Attackers may access arbitrary files using sequences like ''../''. Validate and normalize paths (e.g., realpath()) and use strict allowlists.'
+  metadata:
+    owasp: A01:2021 Broken Access Control
+    cwe: 'CWE-22: Path Traversal'
+    confidence: HIGH
+    impact: HIGH
+  mode: taint
+  pattern-sources:
+  - pattern-either:
+    - pattern: "$_GET"
+    - pattern: "$_POST"
+    - pattern: "$_REQUEST"
+    - pattern: "$_COOKIE"
+    - pattern: "$_SERVER"
+  pattern-sinks:
+  - pattern-either:
+    - pattern: readfile(...)
+    - pattern: file(...)
+    - pattern: unlink(...)
+    - pattern: copy(...)
+    - pattern: rename(...)
+    - pattern: mkdir(...)
+    - pattern: rmdir(...)
+    - pattern: glob(...)
+    - pattern: scandir(...)
+  pattern-sanitizers:
+  - pattern-either:
+    - pattern: basename(...)
+    - pattern: realpath(...)
+    - pattern: sanitize_file_name(...)
+    - pattern: wp_normalize_path(...)
+    - pattern: intval(...)
+    - pattern: absint(...)
+    - pattern: "(int)$X"
+- id: wp-missing-capability-check-ajax
+  languages:
+  - php
+  severity: HIGH
+  message: 'Broken Access Control: An AJAX handler (wp_ajax_) is registered without a current_user_can() capability check. This may allow unauthorized users to perform sensitive actions. Add a capability check at the beginning of the handler.'
+  metadata:
+    owasp: A01:2021 Broken Access Control
+    cwe: 'CWE-862: Missing Authorization'
+    confidence: MEDIUM
+    impact: HIGH
+  patterns:
+  - pattern-either:
+    - pattern: add_action("wp_ajax_$ACTION", $CALLBACK);
+  - pattern-not-inside: |
+      ...
+      current_user_can(...);
+      ...
+- id: wp-missing-nonce-verification
+  languages:
+  - php
+  severity: MEDIUM
+  message: 'CSRF Risk: Code accesses $_POST/$_GET/$_REQUEST without verifying a nonce using wp_verify_nonce(), check_admin_referer(), or check_ajax_referer(). Add nonce verification before processing requests.'
+  metadata:
+    owasp: A01:2021 Broken Access Control
+    cwe: 'CWE-352: Cross-Site Request Forgery'
+    confidence: LOW
+    impact: MEDIUM
+  patterns:
+  - pattern-either:
+    - pattern: "$_POST[$KEY]"
+    - pattern: "$_GET[$KEY]"
+    - pattern: "$_REQUEST[$KEY]"
+  - pattern-either:
+    - pattern: update_option(...)
+    - pattern: add_option(...)
+    - pattern: delete_option(...)
+    - pattern: update_user_meta(...)
+    - pattern: delete_user_meta(...)
+    - pattern: wp_update_user(...)
+    - pattern: wp_insert_post(...)
+    - pattern: wp_delete_post(...)
+    - pattern: move_uploaded_file(...)
+  - pattern-not-regex: "(?s)(wp_verify_nonce\\s*\\(|check_admin_referer\\s*\\(|check_ajax_referer\\s*\\()"
+- id: wp-unrestricted-file-upload
+  languages:
+  - php
+  severity: HIGH
+  message: 'Unrestricted File Upload: File upload handling using $_FILES is detected, but no file type validation (e.g., wp_check_filetype()) is present. Attackers may upload dangerous files. Use wp_handle_upload(), wp_check_filetype(), or wp_check_filetype_and_ext().'
+  metadata:
+    owasp: A01:2021 Broken Access Control
+    cwe: 'CWE-434: Unrestricted Upload of File with Dangerous Type'
+    confidence: MEDIUM
+    impact: HIGH
+  patterns:
+  - pattern-either:
+    - pattern: move_uploaded_file(...)
+    - pattern: copy($_FILES[$NAME]["tmp_name"], ...)
+  - pattern-not-inside: |
+      ...
+      wp_check_filetype(...);
+      ...
+  - pattern-not-inside: |
+      ...
+      wp_handle_upload(...);
+      ...
+  - pattern-not-inside: |
+      ...
+      wp_check_filetype_and_ext(...);
+      ...
+  - pattern-not-inside: |
+      ...
+      pathinfo(..., PATHINFO_EXTENSION);
+      ...
+- id: wp-weak-password-hashing
+  languages:
+  - php
+  severity: HIGH
+  message: 'Cryptographic Failure: Weak hashing functions (md5/sha1/sha256) are used for password hashing. Use WordPress wp_hash_password() or PHP password_hash() instead.'
+  metadata:
+    owasp: A02:2021 Cryptographic Failures
+    cwe: 'CWE-328: Use of Weak Hash'
+    confidence: HIGH
+    impact: HIGH
+  patterns:
+  - pattern-either:
+    - patterns:
+      - pattern: md5($PASSWORD)
+      - metavariable-regex:
+          metavariable: "$PASSWORD"
+          regex: "(?i)(pass|pwd|parola|sifre|secret|credential)"
+    - patterns:
+      - pattern: sha1($PASSWORD)
+      - metavariable-regex:
+          metavariable: "$PASSWORD"
+          regex: "(?i)(pass|pwd|parola|sifre|secret|credential)"
+    - patterns:
+      - pattern: hash("md5", $PASSWORD)
+      - metavariable-regex:
+          metavariable: "$PASSWORD"
+          regex: "(?i)(pass|pwd|parola|sifre|secret|credential)"
+    - patterns:
+      - pattern: hash("sha1", $PASSWORD)
+      - metavariable-regex:
+          metavariable: "$PASSWORD"
+          regex: "(?i)(pass|pwd|parola|sifre|secret|credential)"
+    - patterns:
+      - pattern: hash("sha256", $PASSWORD)
+      - metavariable-regex:
+          metavariable: "$PASSWORD"
+          regex: "(?i)(pass|pwd|parola|sifre|secret|credential)"
+- id: wp-hardcoded-credentials
+  languages:
+  - php
+  severity: HIGH
+  message: 'Hardcoded Credentials: A hardcoded API key, password, or secret was found in source code. Do not embed secrets in code; store them in wp-config.php or environment variables / secret managers.'
+  metadata:
+    owasp: A07:2021 Identification and Authentication Failures
+    cwe: 'CWE-798: Use of Hard-coded Credentials'
+    confidence: MEDIUM
+    impact: HIGH
+  pattern-either:
+  - patterns:
+    - pattern: $VAR = "...";
+    - metavariable-regex:
+        metavariable: "$VAR"
+        regex: "(?i).*(api_key|api_secret|apikey|secret_key|auth_token|access_token|private_key|db_password|mysql_password|smtp_password).*"
+  - patterns:
+    - pattern: define($CONST, "...");
+    - metavariable-regex:
+        metavariable: "$CONST"
+        regex: "(?i)(DB_PASSWORD|AUTH_KEY|SECURE_AUTH_KEY|LOGGED_IN_KEY|NONCE_KEY|AUTH_SALT|SECURE_AUTH_SALT|LOGGED_IN_SALT|NONCE_SALT)"
+    - pattern-not: define($CONST, "put your unique phrase here");
+- id: wp-direct-file-access
+  languages:
+  - php
+  severity: MEDIUM
+  message: 'Security Misconfiguration: This PHP file appears to be directly accessible because it does not check ABSPATH or WPINC. Add defined("ABSPATH") || exit; (or similar) at the top of plugin/theme files.'
+  metadata:
+    owasp: A05:2021 Security Misconfiguration
+    cwe: 'CWE-425: Direct Request'
+    confidence: MEDIUM
+    impact: MEDIUM
+  patterns:
+  - pattern-regex: "^<\\?php"
+  - pattern-not-inside: |
+      defined("ABSPATH") || exit;
+      ...
+  - pattern-not-inside: |
+      defined("ABSPATH") || die;
+      ...
+  - pattern-not-inside: |
+      if ( ! defined( 'ABSPATH' ) ) { exit; }
+      ...
+  - pattern-not-inside: |
+      defined("WPINC") || exit;
+      ...
+- id: wp-privilege-escalation
+  languages:
+  - php
+  severity: CRITICAL
+  message: 'Privilege Escalation: User-controlled input is passed into set_role(), wp_update_user(), or capability/meta updates. Attackers may be able to escalate privileges (e.g., become administrator). Enforce strict authorization checks (e.g., current_user_can()).'
+  metadata:
+    owasp: A01:2021 Broken Access Control
+    cwe: 'CWE-269: Improper Privilege Management'
+    confidence: HIGH
+    impact: CRITICAL
+  mode: taint
+  pattern-sources:
+  - pattern-either:
+    - pattern: "$_GET"
+    - pattern: "$_POST"
+    - pattern: "$_REQUEST"
+    - pattern: "$_COOKIE"
+    - pattern: "$_SERVER"
+    - pattern: file_get_contents("php://input")
+  pattern-sinks:
+  - pattern-either:
+    - pattern: "$USER->set_role(...)"
+    - pattern: wp_update_user(...)
+    - pattern: update_user_meta(..., "wp_capabilities", ...)
+    - pattern: update_user_meta(..., $WPDB->prefix . "capabilities", ...)
+    - pattern: "$USER->add_role(...)"
+    - pattern: add_user_meta(..., "wp_capabilities", ...)
+    - pattern: "$USER->remove_role(...)"
+    - pattern: "$USER->remove_all_caps(...)"
+  pattern-sanitizers:
+  - pattern-either:
+    - pattern: sanitize_key(...)
+    - pattern: sanitize_text_field(...)
+- id: wp-header-injection
+  languages:
+  - php
+  severity: HIGH
+  message: 'HTTP Header Injection: User-controlled input is passed into header() without sanitization. This can enable response splitting or cache poisoning. Strip CR/LF and validate values before setting headers.'
+  metadata:
+    owasp: A03:2021 Injection
+    cwe: 'CWE-113: HTTP Response Splitting'
+    confidence: HIGH
+    impact: HIGH
+  mode: taint
+  pattern-sources:
+  - pattern-either:
+    - pattern: "$_GET"
+    - pattern: "$_POST"
+    - pattern: "$_REQUEST"
+    - pattern: "$_COOKIE"
+    - pattern: "$_SERVER"
+    - pattern: file_get_contents("php://input")
+  pattern-sinks:
+  - pattern: header(...)
+  pattern-sanitizers:
+  - pattern-either:
+    - pattern: intval(...)
+    - pattern: absint(...)
+    - pattern: "(int)$X"
+    - pattern: esc_url(...)
+    - pattern: sanitize_text_field(...)
+    - pattern: sanitize_url(...)
+    - pattern: wp_sanitize_redirect(...)
+    - pattern: preg_replace("/[\\r\\n]/", "", ...)
+- id: wp-insecure-randomness
+  languages:
+  - php
+  severity: MEDIUM
+  message: 'Insecure Randomness: A weak PRNG (rand/mt_rand/array_rand/uniqid/shuffle) is used for security-sensitive purposes (tokens, nonces, secrets, auth, password reset, etc.). Use wp_generate_password(), random_bytes(), or random_int().'
+  metadata:
+    owasp: A02:2021 Cryptographic Failures
+    cwe: 'CWE-330: Use of Insufficiently Random Values'
+    confidence: MEDIUM
+    impact: MEDIUM
+  patterns:
+  - pattern-either:
+    - patterns:
+      - pattern: "$TOKEN = rand(...);"
+      - metavariable-regex:
+          metavariable: "$TOKEN"
+          regex: "(?i).*(token|nonce|secret|key|password|reset|verify|auth|csrf|salt|hash|otp|code).*"
+    - patterns:
+      - pattern: "$TOKEN = mt_rand(...);"
+      - metavariable-regex:
+          metavariable: "$TOKEN"
+          regex: "(?i).*(token|nonce|secret|key|password|reset|verify|auth|csrf|salt|hash|otp|code).*"
+    - patterns:
+      - pattern: "$TOKEN = uniqid(...);"
+      - metavariable-regex:
+          metavariable: "$TOKEN"
+          regex: "(?i).*(token|nonce|secret|key|password|reset|verify|auth|csrf|salt|hash|otp|code).*"
+    - patterns:
+      - pattern: "$TOKEN = array_rand(...);"
+      - metavariable-regex:
+          metavariable: "$TOKEN"
+          regex: "(?i).*(token|nonce|secret|key|password|reset|verify|auth|csrf|salt|hash|otp|code).*"
+- id: wp-unsafe-deserialization-options
+  languages:
+  - php
+  severity: HIGH
+  message: 'Unsafe Deserialization via Options: User-controlled input is passed into update_option()/add_option(). Attackers may store serialized objects and later trigger PHP object injection. Sanitize inputs and avoid storing serialized objects when possible.'
+  metadata:
+    owasp: A08:2021 Software and Data Integrity Failures
+    cwe: 'CWE-502: Deserialization of Untrusted Data'
+    confidence: MEDIUM
+    impact: HIGH
+  mode: taint
+  pattern-sources:
+  - pattern-either:
+    - pattern: "$_GET"
+    - pattern: "$_POST"
+    - pattern: "$_REQUEST"
+    - pattern: "$_COOKIE"
+    - pattern: "$_SERVER"
+    - pattern: file_get_contents("php://input")
+  pattern-sinks:
+  - pattern-either:
+    - pattern: update_option(...)
+    - pattern: update_site_option(...)
+    - pattern: add_option(...)
+  pattern-sanitizers:
+  - pattern-either:
+    - pattern: sanitize_text_field(...)
+    - pattern: sanitize_textarea_field(...)
+    - pattern: intval(...)
+    - pattern: absint(...)
+    - pattern: "(int)$X"
+    - pattern: wp_kses(...)
+    - pattern: wp_kses_post(...)
+    - pattern: sanitize_option(...)
+    - pattern: sanitize_key(...)
+    - pattern: map_deep(..., "sanitize_text_field")
+    - pattern: json_encode(...)
+- id: wp-xxe-injection
+  languages:
+  - php
+  severity: CRITICAL
+  message: 'XML External Entity (XXE) Injection: User-controlled XML input is parsed without disabling external entities. This can lead to file disclosure, SSRF, or denial of service. Use libxml_disable_entity_loader(true) before parsing or use wp_safe_remote_get() for fetching XML.'
+  metadata:
+    owasp: A05:2021 Security Misconfiguration
+    cwe: 'CWE-611: Improper Restriction of XML External Entity Reference'
+    confidence: HIGH
+    impact: CRITICAL
+  mode: taint
+  pattern-sources:
+  - pattern-either:
+    - pattern: "$_GET"
+    - pattern: "$_POST"
+    - pattern: "$_REQUEST"
+    - pattern: "$_COOKIE"
+    - pattern: "$_SERVER"
+    - pattern: file_get_contents("php://input")
+  pattern-sinks:
+  - pattern-either:
+    - pattern: simplexml_load_string(...)
+    - pattern: simplexml_load_file(...)
+    - pattern: DOMDocument::loadXML(...)
+    - pattern: DOMDocument::load(...)
+    - pattern: simplexml_import_dom(...)
+    - pattern: XMLReader::XML(...)
+    - pattern: XMLReader::open(...)
+  pattern-sanitizers:
+  - pattern-either:
+    - pattern: libxml_disable_entity_loader(true)
+    - pattern: libxml_set_external_entity_loader(null)
+- id: wp-template-injection
+  languages:
+  - php
+  severity: CRITICAL
+  message: 'Server-Side Template Injection (SSTI): User-controlled input is passed into template rendering functions. This can lead to remote code execution. Sanitize or validate all template variables and avoid allowing users to control template content.'
+  metadata:
+    owasp: A03:2021 Injection
+    cwe: 'CWE-94: Code Injection'
+    confidence: HIGH
+    impact: CRITICAL
+  mode: taint
+  pattern-sources:
+  - pattern-either:
+    - pattern: "$_GET"
+    - pattern: "$_POST"
+    - pattern: "$_REQUEST"
+    - pattern: "$_COOKIE"
+    - pattern: "$_SERVER"
+    - pattern: file_get_contents("php://input")
+  pattern-sinks:
+  - pattern-either:
+    - pattern: "$TWIG->render(..., ...)"
+    - pattern: "$TWIG->display(..., ...)"
+    - pattern: Blade::render(...)
+    - pattern: Blade::make(...)
+  pattern-sanitizers:
+  - pattern-either:
+    - pattern: esc_html(...)
+    - pattern: esc_attr(...)
+    - pattern: sanitize_text_field(...)
+- id: wp-log-injection
+  languages:
+  - php
+  severity: MEDIUM
+  message: 'Log Injection: User-controlled input is passed directly into logging functions without sanitization. This can enable log forging, injection of fake log entries, or log poisoning attacks. Sanitize or validate input before logging.'
+  metadata:
+    owasp: A09:2021 Security Logging and Monitoring Failures
+    cwe: 'CWE-117: Improper Output Neutralization for Logs'
+    confidence: MEDIUM
+    impact: MEDIUM
+  mode: taint
+  pattern-sources:
+  - pattern-either:
+    - pattern: "$_GET"
+    - pattern: "$_POST"
+    - pattern: "$_REQUEST"
+    - pattern: "$_COOKIE"
+    - pattern: "$_SERVER"
+  pattern-sinks:
+  - pattern-either:
+    - pattern: error_log(...)
+    - pattern: trigger_error(...)
+    - pattern: syslog(...)
+    - pattern: wp_mail(..., $CONTENT, ...)
+  pattern-sanitizers:
+  - pattern-either:
+    - pattern: preg_replace("/[\\r\\n]/", "", ...)
+    - pattern: sanitize_text_field(...)
+    - pattern: str_replace(["\\r", "\\n"], "", ...)

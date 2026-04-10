@@ -93,12 +93,14 @@ async def execute_semgrep_scan(*, output_dir: Path, plugin_path: str, slug: str)
 
 
 
-def build_semgrep_summary(findings: List[Dict[str, Any]]) -> Dict[str, Any]:
+def build_semgrep_summary(findings: List[Dict[str, Any]], errors: Optional[List[str]] = None) -> Dict[str, Any]:
     """Build the persisted summary payload for Semgrep findings."""
     summary = {
         "total_findings": len(findings),
         "breakdown": {"ERROR": 0, "WARNING": 0, "INFO": 0},
     }
+    if errors:
+        summary["errors"] = list(errors)
     for finding in findings:
         severity = finding.get("extra", {}).get("severity", "INFO")
         summary["breakdown"][severity] = summary["breakdown"].get(severity, 0) + 1
@@ -112,13 +114,14 @@ def persist_semgrep_findings(
     scan_id: int,
     findings: List[Dict[str, Any]],
     stop_event: Optional[asyncio.Event],
+    errors: Optional[List[str]] = None,
 ) -> Dict[str, Any] | None:
     """Persist findings unless a stop was requested during save."""
     for finding in findings:
         if stop_requested(stop_event):
             return None
         repo.save_semgrep_finding(scan_id, finding)
-    return build_semgrep_summary(findings)
+    return build_semgrep_summary(findings, errors=errors)
 
 
 

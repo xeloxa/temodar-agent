@@ -181,6 +181,35 @@ def test_semgrep_scanner_treats_syntax_errors_as_non_fatal_when_findings_exist(t
 
 
 
+def test_semgrep_scanner_treats_rule_timeouts_as_non_fatal_when_findings_exist(tmp_path):
+    output_dir = tmp_path / "semgrep-rule-timeout-output"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_file = output_dir / "plugin_results.json"
+    output_file.write_text(
+        json.dumps(
+            {
+                "results": [{"check_id": "rule-1", "path": "test.php"}],
+                "errors": [
+                    {
+                        "message": "Timeout when running javascript.aws-lambda.security.tainted-html-response.tainted-html-response on /app/Plugins/example/source/file.js:"
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    scanner = SemgrepScanner(output_dir=str(output_dir))
+    parsed = scanner._parse_output_file(output_file, "scan summary on stderr")
+
+    assert parsed.success is True
+    assert len(parsed.findings) == 1
+    assert parsed.errors == [
+        "Timeout when running javascript.aws-lambda.security.tainted-html-response.tainted-html-response on /app/Plugins/example/source/file.js:"
+    ]
+
+
+
 def test_semgrep_scanner_keeps_syntax_errors_fatal_when_no_findings_exist(tmp_path):
     output_dir = tmp_path / "semgrep-empty-partial-output"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -208,6 +237,62 @@ def test_semgrep_scanner_keeps_syntax_errors_fatal_when_no_findings_exist(tmp_pa
         "Syntax error at line /app/Plugins/video-gallery-block/source/public/js/plyr.js:1: `?.5:.0625` was unexpected",
         "stderr: scan summary on stderr",
     ]
+
+
+
+def test_semgrep_scanner_keeps_timeout_findings_as_partial_success(tmp_path):
+    output_dir = tmp_path / "semgrep-timeout-output"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_file = output_dir / "plugin_results.json"
+    output_file.write_text(
+        json.dumps(
+            {
+                "results": [{"check_id": "rule-1", "path": "test.php"}],
+                "errors": [
+                    {
+                        "message": "Syntax error at line /app/Plugins/big-plugin/source/file.php:10: `$foo` was unexpected"
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    scanner = SemgrepScanner(output_dir=str(output_dir))
+    parsed = scanner._parse_subprocess_result(
+        output_file=output_file,
+        returncode=1,
+        stderr="timed out after long scan",
+        timed_out=True,
+    )
+
+    assert parsed.success is True
+    assert parsed.partial is True
+    assert len(parsed.findings) == 1
+    assert parsed.errors == [
+        "Scan timeout",
+        "Syntax error at line /app/Plugins/big-plugin/source/file.php:10: `$foo` was unexpected",
+    ]
+
+
+
+def test_semgrep_scanner_marks_timeout_without_output_as_failed(tmp_path):
+    output_dir = tmp_path / "semgrep-timeout-empty-output"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_file = output_dir / "plugin_results.json"
+
+    scanner = SemgrepScanner(output_dir=str(output_dir))
+    parsed = scanner._parse_subprocess_result(
+        output_file=output_file,
+        returncode=1,
+        stderr="timed out after long scan",
+        timed_out=True,
+    )
+
+    assert parsed.success is False
+    assert parsed.partial is False
+    assert parsed.findings == []
+    assert parsed.errors == ["Semgrep failed (code 1): timed out after long scan"]
 
 
 

@@ -59,17 +59,12 @@ async def run_plugin_semgrep_scan(
             plugin_path=str(plugin_path),
             slug=safe_slug,
         )
-        if not result.success:
-            if stop_requested(stop_event):
-                mark_semgrep_scan_stopped(repo=repo, scan_id=scan_id)
-                return
-            raise Exception(f"Semgrep failed: {', '.join(result.errors)}")
-
         summary = persist_semgrep_findings(
             repo=repo,
             scan_id=scan_id,
             findings=result.findings,
             stop_event=stop_event,
+            errors=result.errors,
         )
         if summary is None:
             mark_semgrep_scan_stopped(repo=repo, scan_id=scan_id)
@@ -79,7 +74,17 @@ async def run_plugin_semgrep_scan(
             mark_semgrep_scan_stopped(repo=repo, scan_id=scan_id)
             return
 
-        repo.update_semgrep_scan(scan_id, "completed", summary=summary)
+        if not result.success and not result.findings:
+            raise Exception(f"Semgrep failed: {', '.join(result.errors)}")
+
+        error_message = ", ".join(result.errors) if result.errors else None
+        status = "completed" if result.success else "failed"
+        repo.update_semgrep_scan(
+            scan_id,
+            status,
+            summary=summary,
+            error=error_message,
+        )
     except Exception as exc:
         if stop_requested(stop_event):
             mark_semgrep_scan_stopped(repo=repo, scan_id=scan_id)

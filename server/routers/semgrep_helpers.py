@@ -35,6 +35,7 @@ SEMGREP_STATE_DIR = Path.home() / ".temodar-agent" / "semgrep"
 SEMGREP_STATE_DIR.mkdir(parents=True, exist_ok=True)
 LEGACY_CUSTOM_RULES_PATH = SEM_RESULTS_DIR / "custom_rules.yaml"
 LEGACY_DISABLED_CONFIG_PATH = SEM_RESULTS_DIR / "disabled_config.json"
+ROOT_CUSTOM_RULES_PATH = Path(__file__).resolve().parents[2] / "custom_rules.yaml"
 CUSTOM_RULES_PATH = SEMGREP_STATE_DIR / "custom_rules.yaml"
 DISABLED_CONFIG_PATH = SEMGREP_STATE_DIR / "disabled_config.json"
 PACKAGE_CUSTOM_RULES_PATH = (
@@ -42,10 +43,27 @@ PACKAGE_CUSTOM_RULES_PATH = (
 )
 
 
+def _yaml_file_has_rules(path: Path) -> bool:
+    try:
+        if not path.exists():
+            return False
+        with open(path, "r") as f:
+            data = yaml.safe_load(f) or {}
+        rules = data.get("rules", []) if isinstance(data, dict) else []
+        return isinstance(rules, list) and len(rules) > 0
+    except Exception:
+        return False
+
+
 def bootstrap_default_custom_rules() -> None:
-    if not CUSTOM_RULES_PATH.exists():
-        for candidate in (LEGACY_CUSTOM_RULES_PATH, PACKAGE_CUSTOM_RULES_PATH):
-            if not candidate.exists():
+    should_bootstrap_custom_rules = not _yaml_file_has_rules(CUSTOM_RULES_PATH)
+    if should_bootstrap_custom_rules:
+        for candidate in (
+            ROOT_CUSTOM_RULES_PATH,
+            LEGACY_CUSTOM_RULES_PATH,
+            PACKAGE_CUSTOM_RULES_PATH,
+        ):
+            if not _yaml_file_has_rules(candidate):
                 continue
             try:
                 shutil.copy2(candidate, CUSTOM_RULES_PATH)

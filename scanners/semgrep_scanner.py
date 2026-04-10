@@ -60,7 +60,7 @@ SEMGREP_COMMUNITY_SOURCES = [
     },
 ]
 
-SEMGREP_TIMEOUT_SECONDS = 60
+SEMGREP_TIMEOUT_SECONDS = 3600
 SAFE_SLUG_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 DANGEROUS_PATH_CHARS = [";", "&", "|", "`", "$", "(", ")", "<", ">", "\n", "\r"]
 
@@ -71,6 +71,7 @@ class SemgrepResult:
     findings: List[Dict[str, Any]]
     errors: List[str]
     success: bool
+    partial: bool = False
 
 
 @dataclass
@@ -85,6 +86,7 @@ class SemgrepExecutionResult:
     findings: List[Dict[str, Any]]
     errors: List[str]
     success: bool
+    partial: bool = False
 
 
 class SemgrepScanner:
@@ -105,13 +107,22 @@ class SemgrepScanner:
         self.semgrep_command = get_semgrep_command()
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-    def _result(self, slug: str, *, findings: Optional[List[Dict[str, Any]]] = None, errors: Optional[List[str]] = None, success: bool = False) -> SemgrepResult:
+    def _result(
+        self,
+        slug: str,
+        *,
+        findings: Optional[List[Dict[str, Any]]] = None,
+        errors: Optional[List[str]] = None,
+        success: bool = False,
+        partial: bool = False,
+    ) -> SemgrepResult:
         """Create a normalized Semgrep result payload."""
         return SemgrepResult(
             slug=slug,
             findings=findings or [],
             errors=errors or [],
             success=success,
+            partial=partial,
         )
 
     def _load_disabled_rule_ids(self) -> set[str]:
@@ -310,6 +321,8 @@ class SemgrepScanner:
             "partial parsing",
             "could not parse",
             "was unexpected",
+            "timeout when running",
+            "timed out while running",
         ]
         return any(marker in normalized for marker in non_fatal_markers)
 
@@ -368,10 +381,28 @@ class SemgrepScanner:
         output_file: Path,
         returncode: int,
         stderr: str,
+        timed_out: bool = False,
     ) -> SemgrepExecutionResult:
         """Convert subprocess output into normalized findings/errors."""
         if output_file.exists() and output_file.stat().st_size > 0:
-            return self._parse_output_file(output_file, stderr)
+            parsed = self._parse_output_file(output_file, stderr)
+            if timed_out:
+                timeout_errors = ["Scan timeout"]
+                combined_errors = timeout_errors + parsed.errors
+                if parsed.findings:
+                    return SemgrepExecutionResult(
+                        findings=parsed.findings,
+                        errors=combined_errors,
+                        success=True,
+                        partial=True,
+                    )
+                return SemgrepExecutionResult(
+                    findings=parsed.findings,
+                    errors=combined_errors,
+                    success=False,
+                    partial=True,
+                )
+            return parsed
 
         if returncode != 0:
             return SemgrepExecutionResult(
@@ -404,19 +435,29 @@ class SemgrepScanner:
             stderr=subprocess.PIPE,
             text=True,
         )
+        # Enforce output size cap to prevent memory exhaustion.
+        MAX_OUTPUT_SIZE = 10 * 1024 * 1024  # 10 MB
         try:
-            stdout, stderr = process.communicate(timeout=SEMGREP_TIMEOUT_SECONDS)
-            # Enforce output size cap to prevent memory exhaustion.
-            MAX_OUTPUT_SIZE = 10 * 1024 * 1024  # 10 MB
+            if SEMGREP_TIMEOUT_SECONDS is None:
+                stdout, stderr = process.communicate()
+            else:
+                stdout, stderr = process.communicate(timeout=SEMGREP_TIMEOUT_SECONDS)
             if len(stdout) > MAX_OUTPUT_SIZE:
                 stdout = stdout[:MAX_OUTPUT_SIZE]
             if len(stderr) > MAX_OUTPUT_SIZE:
                 stderr = stderr[:MAX_OUTPUT_SIZE]
         except subprocess.TimeoutExpired:
             process.kill()
-            process.wait()
-            return SemgrepExecutionResult(
-                findings=[], errors=["Scan timeout"], success=False,
+            stdout, stderr = process.communicate()
+            if len(stdout) > MAX_OUTPUT_SIZE:
+                stdout = stdout[:MAX_OUTPUT_SIZE]
+            if len(stderr) > MAX_OUTPUT_SIZE:
+                stderr = stderr[:MAX_OUTPUT_SIZE]
+            return self._parse_subprocess_result(
+                output_file=target.output_file,
+                returncode=process.returncode,
+                stderr=stderr,
+                timed_out=True,
             )
 
         return self._parse_subprocess_result(
@@ -440,6 +481,7 @@ class SemgrepScanner:
                 findings=execution_result.findings,
                 errors=execution_result.errors,
                 success=execution_result.success,
+                partial=execution_result.partial,
             )
         except subprocess.TimeoutExpired:
             return self._result(target.slug, errors=["Scan timeout"])

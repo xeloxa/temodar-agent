@@ -535,6 +535,7 @@
         const totalFindings = Number(summary.total_findings || 0);
         const completedAt = scanData && scanData.completed_at ? String(scanData.completed_at) : '';
         const isCompleted = String((scanData && scanData.status) || '').toLowerCase() === 'completed';
+        const summaryErrors = Array.isArray(summary.errors) ? summary.errors.filter(Boolean) : [];
 
         if (!scanData || !isCompleted || findings === null) {
             container.innerHTML = '<div class="plugin-semgrep-empty">Semgrep result is incomplete or unavailable right now. Please retry the scan or refresh this plugin view.</div>';
@@ -544,14 +545,20 @@
 
         if (findings.length === 0 && totalFindings === 0) {
             const completedLabel = completedAt ? ` Last completed: <strong>${escapeHtml(completedAt)}</strong>.` : '';
-            container.innerHTML = `<div class="plugin-semgrep-empty">No issues were reported by the latest completed Semgrep scan.${completedLabel}</div>`;
+            const warningHtml = summaryErrors.length
+                ? `<div class="plugin-semgrep-summary" style="border-left-color: var(--warn); margin-bottom: 12px;">Scan completed with parser/runtime warnings:<br>${summaryErrors.slice(0, 5).map((error) => `• ${escapeHtml(String(error))}`).join('<br>')}</div>`
+                : '';
+            container.innerHTML = `${warningHtml}<div class="plugin-semgrep-empty">No issues were reported by the latest completed Semgrep scan.${completedLabel}</div>`;
             setDeepScanButtonState('rescan');
             return;
         }
 
         const breakdown = (summary && summary.breakdown) ? summary.breakdown : {};
+        const warningHtml = summaryErrors.length
+            ? `<div class="plugin-semgrep-summary" style="border-left-color: var(--warn); margin-bottom: 12px;">Scan completed with parser/runtime warnings:<br>${summaryErrors.slice(0, 5).map((error) => `• ${escapeHtml(String(error))}`).join('<br>')}</div>`
+            : '';
 
-        let html = `<div class="plugin-semgrep-summary">Found <strong>${findings.length}</strong> issues (ERROR: <span class="sev-error">${breakdown.ERROR || 0}</span>, WARNING: <span class="sev-warning">${breakdown.WARNING || 0}</span>)</div>`;
+        let html = `${warningHtml}<div class="plugin-semgrep-summary">Found <strong>${findings.length}</strong> issues (ERROR: <span class="sev-error">${breakdown.ERROR || 0}</span>, WARNING: <span class="sev-warning">${breakdown.WARNING || 0}</span>)</div>`;
 
         html += findings.map((f) => {
             const sev = String(f.severity || 'INFO').toUpperCase();
@@ -582,6 +589,10 @@
                 if (data.status === 'completed') {
                     clearInterval(interval);
                     loadSemgrepResultsIntoModal(data);
+                    const summaryErrors = Array.isArray(data && data.summary && data.summary.errors) ? data.summary.errors.filter(Boolean) : [];
+                    if (summaryErrors.length) {
+                        showToast(`Semgrep scan completed with ${summaryErrors.length} warning(s). Findings were preserved.`, 'warn');
+                    }
                 } else if (data.status === 'failed') {
                     clearInterval(interval);
                     showToast('Semgrep scan failed: ' + (data.error_message || 'Unknown error'), 'error');

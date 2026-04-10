@@ -4,12 +4,19 @@
 
 <h1 align="center">Temodar Agent</h1>
 
+<blockquote>
+  <p>
+    <strong>Temodar Agent is now listed in <a href="https://github.com/vavkamil/awesome-bugbounty-tools">awesome-bugbounty-tools</a></strong> — a curated bug bounty resources list with <strong>5.9k+ GitHub stars</strong>.
+  </p>
+</blockquote>
+
 <p align="center">
   <img src="https://img.shields.io/badge/Docker-Required-2496ED?logo=docker&logoColor=white" alt="Docker Required">
   <img src="https://img.shields.io/badge/Backend-FastAPI-009688?logo=fastapi&logoColor=white" alt="FastAPI">
   <img src="https://img.shields.io/badge/Analysis-AI--Agent%20%2B%20Semgrep-FF6B35" alt="AI-Agent + Semgrep">
   <img src="https://img.shields.io/badge/License-Apache%202.0-green" alt="License Apache 2.0">
   <img src="https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-lightgrey" alt="Platform">
+  <img src="https://img.shields.io/badge/Listed-awesome--bugbounty--tools-f59e0b?logo=github&logoColor=white" alt="Listed on awesome-bugbounty-tools">
 </p>
 
 <p align="center">

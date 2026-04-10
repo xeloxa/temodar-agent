@@ -42,11 +42,18 @@
         const modelEl = document.getElementById('plugin-ai-model');
         const apiKeyEl = document.getElementById('plugin-ai-api-key');
         const baseUrlEl = document.getElementById('plugin-ai-base-url');
+        const apiKeySavedHintEl = document.getElementById('plugin-ai-api-key-saved-hint');
         if (modelEl) {
             modelEl.placeholder = `Type model name and press Enter — e.g. ${providerConfig.modelHint}`;
         }
         if (apiKeyEl) {
-            apiKeyEl.placeholder = providerConfig.apiKeyPlaceholder;
+            const currentPlaceholder = String(apiKeyEl.dataset.savedPlaceholder || '').trim();
+            apiKeyEl.placeholder = currentPlaceholder || providerConfig.apiKeyPlaceholder;
+        }
+        if (apiKeySavedHintEl) {
+            const currentHint = String(apiKeySavedHintEl.dataset.savedHint || '').trim();
+            apiKeySavedHintEl.textContent = currentHint;
+            apiKeySavedHintEl.style.display = currentHint ? 'block' : 'none';
         }
         if (baseUrlEl) {
             baseUrlEl.placeholder = `${providerConfig.baseUrl} or local compatible endpoint`;
@@ -177,6 +184,27 @@
         return `${raw.slice(0, 6)}••••••${raw.slice(-4)}`;
     }
 
+    function renderApiKeySummary(profile) {
+        if (profile?.api_key_masked) return String(profile.api_key_masked);
+        if (profile?.has_api_key) return 'Saved';
+        return 'No key saved';
+    }
+
+    function getSavedApiKeyPlaceholder(profile) {
+        const providerConfig = getProviderDefaults(profile?.provider);
+        return profile?.has_api_key
+            ? 'Saved API key will be kept unless you enter a new one'
+            : providerConfig.apiKeyPlaceholder;
+    }
+
+    function getSavedApiKeyHint(profile) {
+        if (!profile?.has_api_key) return '';
+        const masked = String(profile?.api_key_masked || '').trim();
+        return masked
+            ? `Saved key: ${masked}. Enter a new key only if you want to replace it.`
+            : 'A saved API key already exists. Enter a new key only if you want to replace it.';
+    }
+
     function renderAiSettingsDashboard() {
         const state = getAiSettingsState();
         const dashboard = state.dashboard || { profiles: [], stats: {} };
@@ -212,7 +240,7 @@
                     <td>
                         <div class="ai-profile-name">
                             <strong>${escapeHtml(String(profile.display_name || 'Untitled profile'))}</strong>
-                            <span>${escapeHtml(maskApiKeyForTable(profile.api_key))}</span>
+                            <span>${escapeHtml(renderApiKeySummary(profile))}</span>
                         </div>
                     </td>
                     <td>${escapeHtml(String(profile.provider_label || profile.provider || '—'))}</td>
@@ -228,6 +256,8 @@
         const modelEl = document.getElementById('plugin-ai-model');
         const nameEl = document.getElementById('plugin-ai-display-name');
         const apiKeyEl = document.getElementById('plugin-ai-api-key');
+        const apiKeySavedHintEl = document.getElementById('plugin-ai-api-key-saved-hint');
+        const apiKeyToggle = document.getElementById('plugin-ai-api-key-toggle');
         const baseUrlEl = document.getElementById('plugin-ai-base-url');
         const models = Array.isArray(profile?.models) && profile.models.length
             ? profile.models
@@ -237,8 +267,21 @@
         if (modelEl) modelEl.value = '';
         if (nameEl) nameEl.value = String(profile?.display_name || '');
         if (apiKeyEl) {
-            apiKeyEl.value = String(profile?.api_key || '');
+            apiKeyEl.value = '';
+            apiKeyEl.dataset.savedPlaceholder = getSavedApiKeyPlaceholder(profile);
+            apiKeyEl.placeholder = apiKeyEl.dataset.savedPlaceholder;
             apiKeyEl.type = 'password';
+        }
+        if (apiKeyToggle) {
+            apiKeyToggle.setAttribute('aria-pressed', 'false');
+            apiKeyToggle.setAttribute('title', 'Show API key');
+            apiKeyToggle.setAttribute('aria-label', 'Show API key');
+        }
+        if (apiKeySavedHintEl) {
+            const savedHint = getSavedApiKeyHint(profile);
+            apiKeySavedHintEl.dataset.savedHint = savedHint;
+            apiKeySavedHintEl.textContent = savedHint;
+            apiKeySavedHintEl.style.display = savedHint ? 'block' : 'none';
         }
         if (baseUrlEl) baseUrlEl.value = String(profile?.base_url || '');
         setDraftModels(models);
@@ -265,7 +308,7 @@
         if (requireApiKey && !payload.api_key && payload.provider !== 'copilot') return 'API key is required for this action.';
         const existing = payload.profile_key ? getProfileByKey(payload.profile_key) : null;
         const currentValue = String(payload.api_key || '').trim();
-        const savedValue = String(existing?.api_key || '').trim();
+        const savedValue = String(existing?.api_key_masked || '').trim();
         const hasNewVisibleKey = currentValue && currentValue !== savedValue;
         if (!hasNewVisibleKey && !existing?.has_api_key && payload.provider !== 'copilot') {
             return 'API key is required for the first save.';
@@ -454,7 +497,11 @@
             apiKeyToggle.addEventListener('click', () => {
                 const input = document.getElementById('plugin-ai-api-key');
                 if (!input) return;
-                input.type = input.type === 'password' ? 'text' : 'password';
+                const shouldReveal = input.type === 'password';
+                input.type = shouldReveal ? 'text' : 'password';
+                apiKeyToggle.setAttribute('aria-pressed', shouldReveal ? 'true' : 'false');
+                apiKeyToggle.setAttribute('title', shouldReveal ? 'Hide API key' : 'Show API key');
+                apiKeyToggle.setAttribute('aria-label', shouldReveal ? 'Hide API key' : 'Show API key');
             });
             apiKeyToggle.dataset.bound = '1';
         }

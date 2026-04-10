@@ -1,7 +1,70 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { makeJsonOutputWriter, parseRunnerInput } from '../src/index.js';
+import { applyProviderEnvironment, makeJsonOutputWriter, parseRunnerInput } from '../src/index.js';
+
+test('applyProviderEnvironment maps runtime env fallback for OpenAI', () => {
+  const previousTemodar = process.env.TEMODAR_AI_API_KEY;
+  const previousOpenAi = process.env.OPENAI_API_KEY;
+
+  process.env.TEMODAR_AI_API_KEY = 'runtime-secret';
+  delete process.env.OPENAI_API_KEY;
+
+  try {
+    applyProviderEnvironment({
+      workspaceRoot: '/tmp/workspace',
+      prompt: 'inspect source',
+      model: 'gpt-4.1-mini',
+      provider: 'openai',
+    });
+
+    assert.equal(process.env.OPENAI_API_KEY, 'runtime-secret');
+  } finally {
+    if (previousTemodar === undefined) {
+      delete process.env.TEMODAR_AI_API_KEY;
+    } else {
+      process.env.TEMODAR_AI_API_KEY = previousTemodar;
+    }
+
+    if (previousOpenAi === undefined) {
+      delete process.env.OPENAI_API_KEY;
+    } else {
+      process.env.OPENAI_API_KEY = previousOpenAi;
+    }
+  }
+});
+
+test('applyProviderEnvironment prefers explicit apiKey over runtime env fallback', () => {
+  const previousTemodar = process.env.TEMODAR_AI_API_KEY;
+  const previousOpenAi = process.env.OPENAI_API_KEY;
+
+  process.env.TEMODAR_AI_API_KEY = 'runtime-secret';
+  delete process.env.OPENAI_API_KEY;
+
+  try {
+    applyProviderEnvironment({
+      workspaceRoot: '/tmp/workspace',
+      prompt: 'inspect source',
+      model: 'gpt-4.1-mini',
+      provider: 'openai',
+      apiKey: 'payload-secret',
+    });
+
+    assert.equal(process.env.OPENAI_API_KEY, 'payload-secret');
+  } finally {
+    if (previousTemodar === undefined) {
+      delete process.env.TEMODAR_AI_API_KEY;
+    } else {
+      process.env.TEMODAR_AI_API_KEY = previousTemodar;
+    }
+
+    if (previousOpenAi === undefined) {
+      delete process.env.OPENAI_API_KEY;
+    } else {
+      process.env.OPENAI_API_KEY = previousOpenAi;
+    }
+  }
+});
 
 test('parseRunnerInput rejects invalid payloads', () => {
   assert.throws(

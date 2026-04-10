@@ -68,10 +68,11 @@ function envKeyForProvider(provider: RunnerInput['provider']): { key?: string; b
   }
 }
 
-function applyProviderEnvironment(payload: RunnerInput): void {
+export function applyProviderEnvironment(payload: RunnerInput): void {
   const envKeys = envKeyForProvider(payload.provider);
-  if (envKeys.key && payload.apiKey) {
-    process.env[envKeys.key] = payload.apiKey;
+  const resolvedApiKey = payload.apiKey || process.env.TEMODAR_AI_API_KEY || '';
+  if (envKeys.key && resolvedApiKey) {
+    process.env[envKeys.key] = resolvedApiKey;
   }
   if (envKeys.baseUrl && payload.baseUrl) {
     process.env[envKeys.baseUrl] = payload.baseUrl;

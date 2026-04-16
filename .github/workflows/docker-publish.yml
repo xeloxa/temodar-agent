@@ -83,7 +83,7 @@ jobs:
         run: npm --prefix ai/node_runner run test
 
       - name: Run Python tests
-        run: pytest
+        run: python -m pytest
 
       - name: Build release image
         run: |

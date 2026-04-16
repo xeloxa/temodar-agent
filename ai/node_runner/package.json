@@ -10,7 +10,7 @@
     "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {
-    "@jackchen_me/open-multi-agent": "^1.0.1",
+    "@jackchen_me/open-multi-agent": "^1.1.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {

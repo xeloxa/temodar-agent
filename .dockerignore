@@ -1,7 +1,11 @@
 .git
 .gitignore
 venv
+.venv
 __pycache__
+.agents
+.claude
+.compozy
 *.pyc
 *.pyo
 *.pyd
@@ -13,3 +17,13 @@ Plugins
 semgrep_results
 temodar_agent.log
 *.log
+.DS_Store
+.coverage
+htmlcov
+coverage
+*.db
+*.sqlite
+*.sqlite3
+ai/node_runner/dist
+dist
+sessions

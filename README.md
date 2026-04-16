@@ -180,54 +180,47 @@ Useful links:
 
 ## Installation
 
-### 1. Clone the repository
+### 1. Pull the latest image
 
 ```bash
-git clone https://github.com/xeloxa/temodar-agent.git
-cd temodar-agent
+docker pull xeloxa/temodar-agent:latest
 ```
 
 ### 2. Start Temodar Agent
 
 ```bash
-chmod +x run.sh
-./run.sh
+docker run -d --name temodar-agent -p 8080:8080 \
+  -v temodar-agent-data:/home/appuser/.temodar-agent \
+  -v temodar-agent-plugins:/app/Plugins \
+  -v temodar-agent-semgrep:/app/semgrep_results \
+  xeloxa/temodar-agent:latest
 ```
 
-### Install a specific version
+`latest` is recommended if you want the newest published image, but starting an existing container with `docker start temodar-agent` does not pull new images. To move to a newer `latest`, pull the image again and recreate the container.
 
-If you want to run a specific released version, clone the repository at the desired tag:
+### Run a specific version
+
+If you want a pinned release instead of `latest`, use a version tag:
 
 ```bash
-git clone --branch v0.1.0 --depth 1 https://github.com/xeloxa/temodar-agent.git
-cd temodar-agent
+docker pull xeloxa/temodar-agent:v0.1.3
+docker run -d --name temodar-agent -p 8080:8080 \
+  -v temodar-agent-data:/home/appuser/.temodar-agent \
+  -v temodar-agent-plugins:/app/Plugins \
+  -v temodar-agent-semgrep:/app/semgrep_results \
+  xeloxa/temodar-agent:v0.1.3
 ```
-
-Replace `v0.1.0` with the release tag you want to use.
-
-> **Note**
-> Clone the project with `git` instead of downloading a release ZIP if you want the UI update flow to work correctly. The in-app Docker update mechanism expects the workspace to be a valid git checkout.
-
-The launcher script automatically:
-- builds the Docker image if needed
-- starts the Temodar Agent container
-- exposes the dashboard on port **8080**
-- mounts persistent local directories for app state, plugin cache, and Semgrep results
-- starts the host-side update watcher used by the app
 
 Open the dashboard at:
 - [http://127.0.0.1:8080](http://127.0.0.1:8080)
 
 ## Data Persistence
 
-Temodar Agent keeps important data on your host machine:
-- `./.temodar-agent` — app state and local database
-- `./Plugins` — downloaded plugin and theme cache
-- `./semgrep_results` — Semgrep scan outputs
+Temodar Agent stores persistent application data in three named Docker volumes: `temodar-agent-data` for app state under `/home/appuser/.temodar-agent`, `temodar-agent-plugins` for downloaded plugin/theme sources under `/app/Plugins`, and `temodar-agent-semgrep` for Semgrep outputs and state under `/app/semgrep_results`.
 
 ## Typical Workflow
 
-1. Start Temodar Agent with `./run.sh`
+1. Start Temodar Agent with the official `docker run` command
 2. Open the local dashboard
 3. Launch a WordPress plugin or theme scan
 4. Review risk labels and prioritized targets
@@ -235,12 +228,23 @@ Temodar Agent keeps important data on your host machine:
 6. Open an AI thread for source-aware follow-up analysis
 7. Continue investigation with stored context, thread memory, and runtime events
 
-## Runtime Controls
+## Updating
 
-While `run.sh` is active:
-- Press **R** to rebuild and restart everything
-- Press **Q** to stop the app
-- Press **Ctrl+C** to exit
+Temodar Agent no longer runs host-side update scripts or local rebuild flows.
+
+To update manually:
+
+```bash
+docker pull xeloxa/temodar-agent:latest
+docker rm -f temodar-agent >/dev/null 2>&1 || true
+docker run -d --name temodar-agent -p 8080:8080 \
+  -v temodar-agent-data:/home/appuser/.temodar-agent \
+  -v temodar-agent-plugins:/app/Plugins \
+  -v temodar-agent-semgrep:/app/semgrep_results \
+  xeloxa/temodar-agent:latest
+```
+
+The in-app update UI only notifies you about new releases and can copy this manual Docker update command. If you installed a pinned tag such as `v0.1.3`, update by pulling and rerunning the newer pinned tag you want rather than assuming `docker start` will move you forward.
 
 ## Star History
 

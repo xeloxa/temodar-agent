@@ -1,0 +1,139 @@
+name: Docker Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+env:
+  DOCKERHUB_REPOSITORY: xeloxa/temodar-agent
+
+jobs:
+  metadata:
+    runs-on: ubuntu-latest
+    outputs:
+      app_version: ${{ steps.meta.outputs.app_version }}
+      git_tag: ${{ steps.meta.outputs.git_tag }}
+      minor_tag: ${{ steps.meta.outputs.minor_tag }}
+      publish_latest: ${{ steps.meta.outputs.publish_latest }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Derive release metadata
+        id: meta
+        shell: bash
+        run: |
+          APP_VERSION=$(python -c "import re, pathlib; text = pathlib.Path('app_meta.py').read_text(encoding='utf-8'); match = re.search(r'^__version__\\s*=\\s*[\"\']([^\"\']+)[\"\']', text, re.MULTILINE); print(match.group(1) if match else '')")
+
+          if [[ -z "${APP_VERSION}" ]]; then
+            echo "Unable to determine __version__ from app_meta.py" >&2
+            exit 1
+          fi
+
+          if [[ "${GITHUB_REF_TYPE}" != "tag" ]]; then
+            echo "This workflow only publishes from git tags." >&2
+            exit 1
+          fi
+
+          GIT_TAG="${GITHUB_REF_NAME}"
+          CLEAN_TAG="${GIT_TAG#v}"
+
+          if [[ "${APP_VERSION}" != "${CLEAN_TAG}" ]]; then
+            echo "Tag ${GIT_TAG} does not match app_meta.py version ${APP_VERSION}" >&2
+            exit 1
+          fi
+
+          MINOR_TAG=$(python -c "import sys; parts = sys.argv[1].split('.'); assert len(parts) >= 2, 'Expected semantic version with at least major.minor'; print('.'.join(parts[:2]))" "${APP_VERSION}")
+
+          echo "app_version=${APP_VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "git_tag=${GIT_TAG}" >> "${GITHUB_OUTPUT}"
+          echo "minor_tag=${MINOR_TAG}" >> "${GITHUB_OUTPUT}"
+
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            echo "publish_latest=false" >> "${GITHUB_OUTPUT}"
+          else
+            echo "publish_latest=true" >> "${GITHUB_OUTPUT}"
+          fi
+
+  validate:
+    needs: metadata
+    uses: ./.github/workflows/reusable-validate.yml
+    with:
+      image_version: ${{ needs.metadata.outputs.app_version }}
+      image_tag: ${{ needs.metadata.outputs.git_tag }}
+      image_build: ${{ github.sha }}
+      run_smoke: true
+      release_mode: true
+      publish_artifact_name: validated-release-image
+
+  publish:
+
+    needs:
+      - metadata
+      - validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Download validated image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.validate.outputs.validated_image_artifact }}
+          path: /tmp
+
+      - name: Load validated image
+        run: docker load -i /tmp/validated-image.tar
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker metadata
+        id: docker_meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKERHUB_REPOSITORY }}
+          tags: |
+            type=raw,value=latest,enable=${{ needs.metadata.outputs.publish_latest }}
+            type=raw,value=${{ needs.metadata.outputs.app_version }}
+            type=raw,value=${{ needs.metadata.outputs.git_tag }}
+            type=raw,value=${{ needs.metadata.outputs.minor_tag }}
+          labels: |
+            org.opencontainers.image.title=Temodar Agent
+            org.opencontainers.image.description=AI agent-powered WordPress security scanner
+            org.opencontainers.image.version=${{ needs.metadata.outputs.app_version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+
+      - name: Apply release tags to validated image
+        shell: bash
+        run: |
+          while IFS= read -r tag; do
+            [[ -n "$tag" ]] || continue
+            docker tag "${{ needs.validate.outputs.validated_image_ref }}" "$tag"
+          done <<< "${{ steps.docker_meta.outputs.tags }}"
+
+      - name: Push validated image tags
+        shell: bash
+        run: |
+          while IFS= read -r tag; do
+            [[ -n "$tag" ]] || continue
+            docker push "$tag"
+          done <<< "${{ steps.docker_meta.outputs.tags }}"

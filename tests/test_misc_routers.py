@@ -269,6 +269,7 @@ def test_system_update_status_endpoint_returns_degraded_payload(monkeypatch):
         return {
             "current_version": "0.1.3",
             "current_tag": "v0.1.3",
+            "runtime_status": "degraded",
             "latest_version": None,
             "update_available": False,
             "status": "degraded",
@@ -285,6 +286,7 @@ def test_system_update_status_endpoint_returns_degraded_payload(monkeypatch):
     assert response.json() == {
         "current_version": "0.1.3",
         "current_tag": "v0.1.3",
+        "runtime_status": "degraded",
         "latest_version": None,
         "update_available": False,
         "status": "degraded",
@@ -329,6 +331,7 @@ def test_system_update_endpoint_degraded_payload_is_frontend_consumable(monkeypa
         return {
             "current_version": "0.1.3",
             "current_tag": "v0.1.3",
+            "runtime_status": "degraded",
             "latest_version": None,
             "update_available": False,
             "status": "degraded",
@@ -346,6 +349,7 @@ def test_system_update_endpoint_degraded_payload_is_frontend_consumable(monkeypa
     assert set(payload.keys()) == {
         "current_version",
         "current_tag",
+        "runtime_status",
         "latest_version",
         "update_available",
         "status",
@@ -354,6 +358,7 @@ def test_system_update_endpoint_degraded_payload_is_frontend_consumable(monkeypa
         "manual_update_required",
     }
     assert payload["status"] == "degraded"
+    assert payload["runtime_status"] == "degraded"
     assert payload["latest_version"] is None
     assert payload["update_command"] is None
     assert payload["update_available"] is False

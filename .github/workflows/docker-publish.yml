@@ -12,9 +12,13 @@ env:
   DOCKERHUB_REPOSITORY: xeloxa/temodar-agent
 
 jobs:
-  publish:
+  metadata:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    outputs:
+      app_version: ${{ steps.meta.outputs.app_version }}
+      git_tag: ${{ steps.meta.outputs.git_tag }}
+      minor_tag: ${{ steps.meta.outputs.minor_tag }}
+      publish_latest: ${{ steps.meta.outputs.publish_latest }}
 
     steps:
       - name: Checkout repository
@@ -26,13 +30,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: npm
-          cache-dependency-path: ai/node_runner/package-lock.json
 
       - name: Derive release metadata
         id: meta
@@ -70,62 +67,34 @@ jobs:
             echo "publish_latest=true" >> "${GITHUB_OUTPUT}"
           fi
 
-      - name: Install Python dependencies
-        run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt
+  validate:
+    needs: metadata
+    uses: ./.github/workflows/reusable-validate.yml
+    with:
+      image_version: ${{ needs.metadata.outputs.app_version }}
+      image_tag: ${{ needs.metadata.outputs.git_tag }}
+      image_build: ${{ github.sha }}
+      run_smoke: true
+      release_mode: true
+      publish_artifact_name: validated-release-image
 
-      - name: Install Node dependencies
-        run: npm --prefix ai/node_runner ci
+  publish:
 
-      - name: Build Node runner
-        run: npm --prefix ai/node_runner run build
+    needs:
+      - metadata
+      - validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
 
-      - name: Run Node tests
-        run: npm --prefix ai/node_runner run test
+    steps:
+      - name: Download validated image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.validate.outputs.validated_image_artifact }}
+          path: /tmp
 
-      - name: Run Python tests
-        run: python -m pytest
-
-      - name: Build release image
-        run: |
-          docker build \
-            --build-arg TEMODAR_AGENT_IMAGE_VERSION=${{ steps.meta.outputs.app_version }} \
-            --build-arg TEMODAR_AGENT_IMAGE_TAG=${{ steps.meta.outputs.git_tag }} \
-            --build-arg TEMODAR_AGENT_IMAGE_BUILD=${GITHUB_SHA} \
-            -t temodar-agent:release \
-            .
-
-      - name: Smoke test release image
-        shell: bash
-        run: |
-          docker rm -f temodar-agent-publish-smoke >/dev/null 2>&1 || true
-          trap 'docker logs temodar-agent-publish-smoke || true; docker rm -f temodar-agent-publish-smoke >/dev/null 2>&1 || true' EXIT
-          docker run -d --name temodar-agent-publish-smoke -p 18081:8080 temodar-agent:release
-          for attempt in {1..30}; do
-            if curl --fail --silent http://127.0.0.1:18081/ >/dev/null; then
-              break
-            fi
-            sleep 2
-          done
-          curl --fail --silent http://127.0.0.1:18081/ >/dev/null
-          curl --fail --silent http://127.0.0.1:18081/api/system/update >/tmp/temodar-publish-system-update.json
-          python - <<'PY'
-          import json
-          from pathlib import Path
-          payload = json.loads(Path('/tmp/temodar-publish-system-update.json').read_text(encoding='utf-8'))
-          required = {
-              'current_version',
-              'current_tag',
-              'runtime_status',
-              'status',
-              'update_available',
-              'manual_update_required',
-          }
-          missing = required - payload.keys()
-          if missing:
-              raise SystemExit(f'Missing keys from /api/system/update: {sorted(missing)}')
-          PY
-          docker rm -f temodar-agent-publish-smoke >/dev/null 2>&1 || true
-          trap - EXIT
+      - name: Load validated image
+        run: docker load -i /tmp/validated-image.tar
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -142,25 +111,29 @@ jobs:
         with:
           images: ${{ env.DOCKERHUB_REPOSITORY }}
           tags: |
-            type=raw,value=latest,enable=${{ steps.meta.outputs.publish_latest }}
-            type=raw,value=${{ steps.meta.outputs.app_version }}
-            type=raw,value=${{ steps.meta.outputs.git_tag }}
-            type=raw,value=${{ steps.meta.outputs.minor_tag }}
+            type=raw,value=latest,enable=${{ needs.metadata.outputs.publish_latest }}
+            type=raw,value=${{ needs.metadata.outputs.app_version }}
+            type=raw,value=${{ needs.metadata.outputs.git_tag }}
+            type=raw,value=${{ needs.metadata.outputs.minor_tag }}
           labels: |
             org.opencontainers.image.title=Temodar Agent
             org.opencontainers.image.description=AI agent-powered WordPress security scanner
-            org.opencontainers.image.version=${{ steps.meta.outputs.app_version }}
+            org.opencontainers.image.version=${{ needs.metadata.outputs.app_version }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.docker_meta.outputs.tags }}
-          labels: ${{ steps.docker_meta.outputs.labels }}
-          build-args: |
-            TEMODAR_AGENT_IMAGE_VERSION=${{ steps.meta.outputs.app_version }}
-            TEMODAR_AGENT_IMAGE_TAG=${{ steps.meta.outputs.git_tag }}
-            TEMODAR_AGENT_IMAGE_BUILD=${{ github.sha }}
+      - name: Apply release tags to validated image
+        shell: bash
+        run: |
+          while IFS= read -r tag; do
+            [[ -n "$tag" ]] || continue
+            docker tag "${{ needs.validate.outputs.validated_image_ref }}" "$tag"
+          done <<< "${{ steps.docker_meta.outputs.tags }}"
+
+      - name: Push validated image tags
+        shell: bash
+        run: |
+          while IFS= read -r tag; do
+            [[ -n "$tag" ]] || continue
+            docker push "$tag"
+          done <<< "${{ steps.docker_meta.outputs.tags }}"

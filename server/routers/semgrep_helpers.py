@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 import yaml
 
 from infrastructure.semgrep_runtime import get_semgrep_command, is_semgrep_available
+from runtime_paths import resolve_runtime_paths
 from scanners.semgrep_scanner import (
     DEFAULT_ENABLED_RULESETS,
     SEMGREP_COMMUNITY_SOURCES,
@@ -29,18 +30,27 @@ SLUG_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{1,100}$")
 RULESET_PATTERN = re.compile(r"^[a-zA-Z0-9_./-]+$")
 RULE_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 
-SEM_RESULTS_DIR = Path("./semgrep_results")
-SEM_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-SEMGREP_STATE_DIR = Path.home() / ".temodar-agent" / "semgrep"
-SEMGREP_STATE_DIR.mkdir(parents=True, exist_ok=True)
-LEGACY_CUSTOM_RULES_PATH = SEM_RESULTS_DIR / "custom_rules.yaml"
-LEGACY_DISABLED_CONFIG_PATH = SEM_RESULTS_DIR / "disabled_config.json"
+RUNTIME_PATHS = resolve_runtime_paths()
+SEM_RESULTS_DIR = RUNTIME_PATHS.semgrep_outputs_dir
+SEMGREP_STATE_DIR = RUNTIME_PATHS.semgrep_dir
+LEGACY_SEM_RESULTS_DIR = Path("./semgrep_results")
+LEGACY_CUSTOM_RULES_PATH = LEGACY_SEM_RESULTS_DIR / "custom_rules.yaml"
+LEGACY_DISABLED_CONFIG_PATH = LEGACY_SEM_RESULTS_DIR / "disabled_config.json"
 ROOT_CUSTOM_RULES_PATH = Path(__file__).resolve().parents[2] / "custom_rules.yaml"
 CUSTOM_RULES_PATH = SEMGREP_STATE_DIR / "custom_rules.yaml"
 DISABLED_CONFIG_PATH = SEMGREP_STATE_DIR / "disabled_config.json"
 PACKAGE_CUSTOM_RULES_PATH = (
     Path(__file__).resolve().parents[2] / "semgrep_results" / "custom_rules.yaml"
 )
+
+
+def ensure_semgrep_state_dir() -> bool:
+    try:
+        SEMGREP_STATE_DIR.mkdir(parents=True, exist_ok=True)
+        return True
+    except OSError:
+        logger.warning("Semgrep state directory is not writable: %s", SEMGREP_STATE_DIR)
+        return False
 
 
 def _yaml_file_has_rules(path: Path) -> bool:
@@ -56,6 +66,9 @@ def _yaml_file_has_rules(path: Path) -> bool:
 
 
 def bootstrap_default_custom_rules() -> None:
+    if not ensure_semgrep_state_dir():
+        return
+
     should_bootstrap_custom_rules = not _yaml_file_has_rules(CUSTOM_RULES_PATH)
     if should_bootstrap_custom_rules:
         for candidate in (
@@ -120,6 +133,8 @@ def get_disabled_config() -> Dict[str, List[str]]:
 
 def save_disabled_config(config: Dict[str, List[str]]):
     """Save disabled configuration."""
+    if not ensure_semgrep_state_dir():
+        raise PermissionError("Semgrep persistent state is not writable in the current runtime environment.")
     DISABLED_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(DISABLED_CONFIG_PATH, "w") as f:
         json.dump(config, f)
@@ -230,6 +245,7 @@ def _validate_semgrep_rules_config(rules_config: Dict[str, Any]) -> Optional[str
 
 
 def load_custom_rules() -> List[Dict[str, Any]]:
+    bootstrap_default_custom_rules()
     custom_rules: List[Dict[str, Any]] = []
     if CUSTOM_RULES_PATH.exists():
         try:
@@ -263,6 +279,7 @@ def load_custom_rules() -> List[Dict[str, Any]]:
 
 
 def load_custom_rules_document() -> Dict[str, Any]:
+    bootstrap_default_custom_rules()
     if CUSTOM_RULES_PATH.exists():
         try:
             with open(CUSTOM_RULES_PATH, "r") as f:
@@ -273,6 +290,8 @@ def load_custom_rules_document() -> Dict[str, Any]:
 
 
 def save_custom_rules_document(rules_data: Dict[str, Any]) -> None:
+    if not ensure_semgrep_state_dir():
+        raise PermissionError("Semgrep persistent state is not writable in the current runtime environment.")
     CUSTOM_RULES_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(CUSTOM_RULES_PATH, "w") as f:
         yaml.dump(rules_data, f, default_flow_style=False, sort_keys=False)
@@ -330,6 +349,3 @@ def build_semgrep_rules_response() -> Dict[str, Any]:
         "custom_rules": custom_rules,
         "community_sources": SEMGREP_COMMUNITY_SOURCES,
     }
-
-
-bootstrap_default_custom_rules()

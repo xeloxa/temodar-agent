@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from ai.context_builder import resolve_existing_thread_source_path
+from runtime_paths import resolve_runtime_paths
 
 
 def serialize_settings(repo, settings: Dict[str, Any] | None) -> Dict[str, Any] | None:
@@ -64,7 +65,7 @@ def serialize_thread(thread: Dict[str, Any]) -> Dict[str, Any]:
         plugin_slug=str(thread.get("plugin_slug") or "").strip(),
         is_theme=bool(thread.get("is_theme")),
         last_scan_session_id=thread.get("last_scan_session_id"),
-        root_path=Path.cwd(),
+        root_path=resolve_runtime_paths().root,
     )
     source_path = str(existing_source.resolve()) if existing_source is not None else last_source_path
     source_available = bool(source_path)

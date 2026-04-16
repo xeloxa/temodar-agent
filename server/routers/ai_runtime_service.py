@@ -5,6 +5,7 @@ from typing import Any, Callable, Dict, List
 from fastapi import HTTPException, status
 
 from ai.runtime_bridge import BridgeError, BridgeProtocolError, BridgeTimeoutError
+from runtime_paths import resolve_runtime_paths
 from server.routers.ai_serialization import (
     serialize_run_task,
     serialize_team_event,
@@ -171,7 +172,8 @@ def create_user_message_and_run(
 
 
 def build_approval_control_path(*, workspace_root: Path, thread_id: int, run_id: int) -> Path:
-    approvals_dir = workspace_root / ".temodar-ai-approvals"
+    del workspace_root
+    approvals_dir = resolve_runtime_paths().approvals_dir
     approvals_dir.mkdir(parents=True, exist_ok=True)
     return approvals_dir / f"thread-{thread_id}-run-{run_id}.json"
 

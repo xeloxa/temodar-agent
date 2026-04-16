@@ -5,10 +5,16 @@ SQLite database schema and connection handling.
 """
 
 from contextlib import contextmanager
+import logging
 import os
 from pathlib import Path
 import sqlite3
+import tempfile
 from typing import Optional
+
+from runtime_paths import resolve_runtime_paths
+
+logger = logging.getLogger("temodar_agent")
 
 SCAN_SCHEMA_STATEMENTS = [
     """
@@ -330,7 +336,7 @@ AI_MIGRATION_STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_ai_threads_plugin_scope_guard ON ai_threads(plugin_slug, is_theme)",
 ]
 
-DEFAULT_DB_PATH = Path.home() / ".temodar-agent" / "temodar_agent.db"
+DEFAULT_DB_PATH = resolve_runtime_paths().db_file
 
 
 def _table_has_unique_thread_scope(cursor) -> bool:
@@ -622,9 +628,23 @@ def _migrate_ai_tables(cursor) -> None:
     _backfill_ai_defaults(cursor)
 
 
-def ensure_db_dir() -> None:
-    """Ensure the database directory exists."""
-    DEFAULT_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+def _is_directory_writable(directory: Path) -> bool:
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(dir=directory, delete=True):
+            pass
+        return True
+    except OSError:
+        return False
+
+
+def ensure_db_dir(path: Optional[Path] = None) -> Path:
+    """Ensure the database directory exists and return the effective path."""
+    target = path or DEFAULT_DB_PATH
+    if _is_directory_writable(target.parent):
+        return target
+
+    raise PermissionError(f"Database directory is not writable: {target.parent}")
 
 
 def get_db_path() -> Path:
@@ -634,11 +654,15 @@ def get_db_path() -> Path:
 
 
 def _resolve_db_path(db_path: Optional[Path]) -> Path:
-    """Resolve the effective database path and ensure default directory exists."""
+    """Resolve the effective database path and ensure its directory exists."""
     if db_path is not None:
-        return db_path
-    ensure_db_dir()
-    return get_db_path()
+        return ensure_db_dir(db_path)
+
+    env_path = os.environ.get("TEMODAR_AGENT_DB")
+    if env_path:
+        return ensure_db_dir(Path(env_path))
+
+    return ensure_db_dir()
 
 
 def init_db(db_path: Optional[Path] = None) -> None:

@@ -1,11 +1,48 @@
 import json
 import sqlite3
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from ai.repository import AIRepository
 from database.models import init_db
+from runtime_paths import RuntimePaths
 from server.app import create_app
+
+
+
+def _runtime_paths(runtime_root):
+    return RuntimePaths(
+        root=runtime_root,
+        db_file=runtime_root / "temodar_agent.db",
+        logs_dir=runtime_root / "logs",
+        plugins_dir=runtime_root / "plugins",
+        semgrep_dir=runtime_root / "semgrep",
+        semgrep_outputs_dir=runtime_root / "semgrep-results",
+        approvals_dir=runtime_root / "approvals",
+    )
+
+
+
+def _runtime_plugin_source(runtime_root, slug, *, is_theme=False):
+    root_dir = "Themes" if is_theme else "Plugins"
+    source_dir = runtime_root / "plugins" / root_dir / slug / "source"
+    source_dir.mkdir(parents=True, exist_ok=True)
+    (source_dir / "plugin.php").write_text("<?php // plugin", encoding="utf-8")
+    return source_dir
+
+
+
+def _patch_runtime_paths(monkeypatch, runtime_root):
+    runtime_paths = _runtime_paths(runtime_root)
+    monkeypatch.setattr("downloaders.plugin_downloader.resolve_runtime_paths", lambda: runtime_paths)
+    monkeypatch.setattr("downloaders.theme_downloader.resolve_runtime_paths", lambda: runtime_paths)
+    monkeypatch.setattr("ai.context_builder.resolve_runtime_paths", lambda: runtime_paths)
+    monkeypatch.setattr("server.routers.ai.resolve_runtime_paths", lambda: runtime_paths)
+    monkeypatch.setattr("server.routers.ai_runtime_service.resolve_runtime_paths", lambda: runtime_paths)
+    monkeypatch.setattr("server.routers.ai_serialization.resolve_runtime_paths", lambda: runtime_paths)
+    return runtime_paths
+
 
 
 def _insert_scan_result(db_path, session_id, slug, is_theme=False, version="1.0.0"):
@@ -24,22 +61,21 @@ def _insert_scan_result(db_path, session_id, slug, is_theme=False, version="1.0.
 
 
 def _prepare_thread_source(tmp_path, slug, *, is_theme=False):
-    root_dir = "Themes" if is_theme else "Plugins"
-    source_dir = tmp_path / root_dir / slug / "source"
-    source_dir.mkdir(parents=True, exist_ok=True)
-    (source_dir / "plugin.php").write_text("<?php // plugin", encoding="utf-8")
-    return source_dir
+    runtime_root = tmp_path / ".temodar-agent"
+    return _runtime_plugin_source(runtime_root, slug, is_theme=is_theme)
+
 
 
 def _prepare_trusted_source(monkeypatch, tmp_path, db_path, slug, session_id, *, is_theme=False):
+    runtime_root = tmp_path / ".temodar-agent"
+    _patch_runtime_paths(monkeypatch, runtime_root)
     _insert_scan_result(db_path, session_id, slug, is_theme=is_theme)
-    _prepare_thread_source(tmp_path, slug, is_theme=is_theme)
-    monkeypatch.setattr("server.routers.ai.Path.cwd", lambda: tmp_path)
-    return tmp_path
+    return _runtime_plugin_source(runtime_root, slug, is_theme=is_theme)
 
 
 def _create_test_client(monkeypatch, db_path):
     monkeypatch.setenv("TEMODAR_AGENT_DB", str(db_path))
+    monkeypatch.setattr("server.app.ensure_db_dir", lambda path=None: db_path)
     monkeypatch.setattr(
         "server.app.update_manager.manager.get_status",
         lambda force=False: {"status": "ok"},
@@ -170,7 +206,7 @@ def test_create_message_workspace_default_prepares_workspace_even_for_short_prom
     )
     thread = repository.get_or_create_thread(plugin_slug="akismet", is_theme=False)
 
-    monkeypatch.setattr("server.routers.ai.Path.cwd", lambda: tmp_path)
+    _patch_runtime_paths(monkeypatch, tmp_path / ".temodar-agent")
 
     prepare_calls = []
     bridge_payloads = []
@@ -244,7 +280,7 @@ def test_create_message_workspace_mode_builds_bridge_payload(monkeypatch, tmp_pa
     assert response.status_code == 200
     assert captured_payload["executionMode"] == "raw_open_multi_agent"
     assert captured_payload["teamMode"] == "single_agent"
-    assert captured_payload["workspaceRoot"].endswith("/Plugins/akismet/source")
+    assert captured_payload["workspaceRoot"].endswith("/plugins/Plugins/akismet/source")
     assert captured_payload["needsTools"] is True
     assert captured_payload["runtimeEnv"]["TEMODAR_AI_API_KEY"] == "test-key"
     assert 'Temodar Agent' in captured_payload["systemPrompt"]
@@ -319,7 +355,7 @@ def test_create_message_uses_metadata_only_mode_when_trusted_source_path_is_miss
     thread = repository.get_or_create_thread(plugin_slug="akismet", is_theme=False)
 
     _insert_scan_result(db_path, 1, "akismet", is_theme=False)
-    monkeypatch.setattr("server.routers.ai.Path.cwd", lambda: tmp_path)
+    _patch_runtime_paths(monkeypatch, tmp_path / ".temodar-agent")
     monkeypatch.setattr(
         "server.routers.ai.run_agent_bridge",
         lambda payload: {"output": "Assistant summary", "events": [], "result": {"content": "Assistant summary"}},
@@ -514,7 +550,7 @@ def test_prepare_thread_source_endpoint_returns_attached_thread(monkeypatch, tmp
     thread = repository.get_or_create_thread(plugin_slug="akismet", is_theme=False)
 
     source_dir = _prepare_thread_source(tmp_path, "akismet", is_theme=False)
-    monkeypatch.setattr("server.routers.ai.Path.cwd", lambda: tmp_path)
+    _patch_runtime_paths(monkeypatch, tmp_path / ".temodar-agent")
 
     client = _create_test_client(monkeypatch, db_path)
     response = client.post(
@@ -548,7 +584,9 @@ def test_run_approval_endpoint_rejects_pending_run(monkeypatch, tmp_path):
         workspace_path=str(tmp_path),
     )
 
-    control_file = tmp_path / ".temodar-ai-approvals" / "decision.json"
+    runtime_root = tmp_path / ".temodar-agent"
+    _patch_runtime_paths(monkeypatch, runtime_root)
+    control_file = runtime_root / "approvals" / "decision.json"
     repository.upsert_run_approval(
         run_id=run["id"],
         thread_id=thread["id"],
@@ -599,7 +637,8 @@ def test_run_approval_endpoint_rejects_control_path_outside_workspace(monkeypatc
         workspace_path=str(tmp_path / "workspace"),
     )
 
-    bad_control_file = tmp_path / "somewhere-else" / ".temodar-ai-approvals" / "decision.json"
+    _patch_runtime_paths(monkeypatch, tmp_path / ".temodar-agent")
+    bad_control_file = tmp_path / "somewhere-else" / "approvals" / "decision.json"
     repository.upsert_run_approval(
         run_id=run["id"],
         thread_id=thread["id"],

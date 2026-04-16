@@ -191,8 +191,6 @@ docker pull xeloxa/temodar-agent:latest
 ```bash
 docker run -d --name temodar-agent -p 8080:8080 \
   -v temodar-agent-data:/home/appuser/.temodar-agent \
-  -v temodar-agent-plugins:/app/Plugins \
-  -v temodar-agent-semgrep:/app/semgrep_results \
   xeloxa/temodar-agent:latest
 ```
 
@@ -206,8 +204,6 @@ If you want a pinned release instead of `latest`, use a version tag:
 docker pull xeloxa/temodar-agent:v0.1.3
 docker run -d --name temodar-agent -p 8080:8080 \
   -v temodar-agent-data:/home/appuser/.temodar-agent \
-  -v temodar-agent-plugins:/app/Plugins \
-  -v temodar-agent-semgrep:/app/semgrep_results \
   xeloxa/temodar-agent:v0.1.3
 ```
 
@@ -216,7 +212,9 @@ Open the dashboard at:
 
 ## Data Persistence
 
-Temodar Agent stores persistent application data in three named Docker volumes: `temodar-agent-data` for app state under `/home/appuser/.temodar-agent`, `temodar-agent-plugins` for downloaded plugin/theme sources under `/app/Plugins`, and `temodar-agent-semgrep` for Semgrep outputs and state under `/app/semgrep_results`.
+Temodar Agent stores persistent application data in one named Docker volume: `temodar-agent-data`, mounted at `/home/appuser/.temodar-agent`.
+
+This is a hard cutover to the canonical runtime root. Existing three-volume installs are no longer the supported Docker contract. Recreate the container with the official one-volume command instead of keeping `temodar-agent-plugins` or `temodar-agent-semgrep` mounted.
 
 ## Typical Workflow
 
@@ -239,12 +237,12 @@ docker pull xeloxa/temodar-agent:latest
 docker rm -f temodar-agent >/dev/null 2>&1 || true
 docker run -d --name temodar-agent -p 8080:8080 \
   -v temodar-agent-data:/home/appuser/.temodar-agent \
-  -v temodar-agent-plugins:/app/Plugins \
-  -v temodar-agent-semgrep:/app/semgrep_results \
   xeloxa/temodar-agent:latest
 ```
 
 The in-app update UI only notifies you about new releases and can copy this manual Docker update command. If you installed a pinned tag such as `v0.1.3`, update by pulling and rerunning the newer pinned tag you want rather than assuming `docker start` will move you forward.
+
+If you are upgrading from an older three-volume install, stop using the old plugin and Semgrep volumes and recreate the container with only `temodar-agent-data` mounted at `/home/appuser/.temodar-agent`.
 
 ## Star History
 

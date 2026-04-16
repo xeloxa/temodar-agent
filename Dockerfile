@@ -19,6 +19,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
     ca-certificates \
     git \
+    gosu \
     nodejs \
     npm \
     && rm -rf /var/lib/apt/lists/*
@@ -36,11 +37,15 @@ RUN mkdir -p /licenses && \
     cp /app/licenses/SEMGREP_SOURCE_NOTICE.txt /licenses/SEMGREP_SOURCE_NOTICE.txt
 
 RUN useradd -m -u 10001 appuser && \
-    mkdir -p /app/Plugins /app/semgrep_results /app/sessions && \
-    chown -R appuser:appuser /app
+    mkdir -p /app/Plugins /app/semgrep_results /app/sessions /home/appuser/.temodar-agent && \
+    chown -R appuser:appuser /app /home/appuser
 
-USER appuser
+RUN chmod +x /app/docker-entrypoint.sh
 
 EXPOSE 8080
 
+HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=6 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2)"
+
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["python", "temodar-agent.py"]

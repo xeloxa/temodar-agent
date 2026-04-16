@@ -1,7 +1,7 @@
 import os
 from dataclasses import dataclass
 
-__version__ = "0.1.3"
+__version__ = "0.2.0"
 __author__ = "Ali Sünbül (xeloxa)"
 
 RUNTIME_VERSION_ENV = "TEMODAR_AGENT_IMAGE_VERSION"

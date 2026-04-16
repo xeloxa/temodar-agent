@@ -7,30 +7,41 @@ REST API and WebSocket endpoints for the web dashboard.
 import logging
 import os
 import secrets
-from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi.errors import RateLimitExceeded
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import PlainTextResponse, Response
 
 from app_meta import get_runtime_metadata
-from logger import LOG_FILE
+from database.models import ensure_db_dir
+from logger import build_rotating_file_handler
 from server import update_manager
 from server.limiter import limiter
 from server.routers import ai, catalog, favorites, scans, semgrep, system
+from server.routers.semgrep_helpers import bootstrap_default_custom_rules
 from server.websockets import manager
 
 logger = logging.getLogger("temodar_agent")
 ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
 ALLOWED_HOST_SET = set(ALLOWED_HOSTS)
 STATIC_DIR = Path(__file__).parent / "static"
+
+
+
+def validate_runtime_persistence() -> Path:
+    """Validate critical runtime persistence before serving requests."""
+    db_path = ensure_db_dir()
+    runtime_root = db_path.parent
+    logger.info("Using canonical runtime root: %s", runtime_root)
+    logger.info("Critical durable-root validation succeeded for database path: %s", db_path)
+    return runtime_root
 
 _AUTH_TOKEN = os.environ.get("TEMODAR_AUTH_TOKEN", "").strip()
 _PUBLIC_PATH_PREFIXES = ("/static", "/assets", "/docs", "/openapi.json", "/redoc")
@@ -98,16 +109,23 @@ def websocket_has_valid_auth(websocket: WebSocket) -> bool:
 
 
 
-def setup_logging():
+def setup_logging() -> None:
     """Configure application logging."""
+    handlers: list[logging.Handler] = [logging.StreamHandler()]
+    file_handler = build_rotating_file_handler()
+    if file_handler is not None:
+        handlers.insert(0, file_handler)
+
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[
-            RotatingFileHandler(LOG_FILE, maxBytes=10 * 1024 * 1024, backupCount=5),
-            logging.StreamHandler(),
-        ],
+        handlers=handlers,
+        force=True,
     )
+    if file_handler is None:
+        logging.getLogger("temodar_agent").warning(
+            "File logging disabled because the log directory is not writable."
+        )
     logging.getLogger("uvicorn").setLevel(logging.INFO)
     logging.getLogger("uvicorn.access").setLevel(logging.INFO)
 
@@ -117,6 +135,8 @@ def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
     setup_logging()
     logger.info("Starting Temodar Agent Server...")
+    validate_runtime_persistence()
+    bootstrap_default_custom_rules()
     runtime_metadata = get_runtime_metadata()
 
     app = FastAPI(
@@ -205,6 +225,10 @@ def register_root_route(app: FastAPI, static_dir: Path) -> None:
         if index_path.exists():
             return FileResponse(str(index_path))
         return HTMLResponse("<h1>Temodar Agent Dashboard</h1><p>Static files not found.</p>")
+
+    @app.get("/health")
+    async def health() -> JSONResponse:
+        return JSONResponse({"status": "ok"})
 
 
 

@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 import yaml
 
 from infrastructure.semgrep_runtime import get_semgrep_command, semgrep_install_hint
+from runtime_paths import resolve_runtime_paths
 
 
 # Official Semgrep Registry Rulesets + Temodar Agent Core
@@ -60,9 +61,15 @@ SEMGREP_COMMUNITY_SOURCES = [
     },
 ]
 
+RUNTIME_PATHS = resolve_runtime_paths()
 SEMGREP_TIMEOUT_SECONDS = 3600
 SAFE_SLUG_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 DANGEROUS_PATH_CHARS = [";", "&", "|", "`", "$", "(", ")", "<", ">", "\n", "\r"]
+LEGACY_SEMGREP_RESULTS_DIR = Path("./semgrep_results")
+LEGACY_PACKAGE_SEMGREP_RESULTS_DIR = Path(__file__).resolve().parents[1] / "semgrep_results"
+SHARED_DISABLED_CONFIG_PATH = RUNTIME_PATHS.semgrep_dir / "disabled_config.json"
+CANONICAL_CUSTOM_RULES_PATH = RUNTIME_PATHS.semgrep_dir / "custom_rules.yaml"
+DEFAULT_SEMGREP_OUTPUT_DIR = RUNTIME_PATHS.semgrep_outputs_dir
 
 
 @dataclass
@@ -93,7 +100,7 @@ class SemgrepScanner:
     def __init__(
         self,
         rules_path: Optional[str] = None,
-        output_dir: str = "./semgrep_results",
+        output_dir: str | Path = DEFAULT_SEMGREP_OUTPUT_DIR,
         workers: int = 3,
         use_registry_rules: bool = True,
         registry_rulesets: Optional[List[str]] = None,
@@ -139,7 +146,7 @@ class SemgrepScanner:
             except Exception:
                 pass
 
-        shared_disabled_file = Path("./semgrep_results/disabled_config.json")
+        shared_disabled_file = SHARED_DISABLED_CONFIG_PATH
         if shared_disabled_file.exists():
             try:
                 with open(shared_disabled_file, "r") as file_handle:
@@ -155,8 +162,9 @@ class SemgrepScanner:
         """Find the best available custom rules file candidate."""
         custom_candidates = [
             self.output_dir / "custom_rules.yaml",
-            Path("./semgrep_results/custom_rules.yaml"),
-            Path(__file__).resolve().parents[1] / "semgrep_results" / "custom_rules.yaml",
+            CANONICAL_CUSTOM_RULES_PATH,
+            LEGACY_SEMGREP_RESULTS_DIR / "custom_rules.yaml",
+            LEGACY_PACKAGE_SEMGREP_RESULTS_DIR / "custom_rules.yaml",
         ]
         return next((path for path in custom_candidates if path.exists()), None)
 
@@ -299,7 +307,7 @@ class SemgrepScanner:
 
     def _build_scan_command(self, target: SemgrepTarget) -> List[str]:
         """Build the full semgrep subprocess command."""
-        command = list(self.semgrep_command)
+        command = list(self.semgrep_command or [])
         command.extend(self._get_config_args())
         command.extend(
             [

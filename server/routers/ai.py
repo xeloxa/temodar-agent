@@ -12,6 +12,7 @@ from ai.context_builder import (
 from ai.repository import AIRepository
 from ai.runtime_bridge import run_agent_bridge, run_agent_bridge_stream
 from ai.workspace_manager import cleanup_run_workspace
+from runtime_paths import resolve_runtime_paths
 from server.routers.ai_provider_service import (
     run_provider_connection_test,
     urllib_request,
@@ -280,7 +281,7 @@ def decide_run_approval(run_id: int, payload: AIRunApprovalDecisionRequest):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Run workspace is missing.")
 
     control_file = Path(control_path).resolve()
-    expected_approvals_dir = (Path(workspace_path).resolve() / ".temodar-ai-approvals").resolve()
+    expected_approvals_dir = resolve_runtime_paths().approvals_dir.resolve()
     try:
         if os.path.commonpath([str(expected_approvals_dir), str(control_file)]) != str(expected_approvals_dir):
             raise HTTPException(

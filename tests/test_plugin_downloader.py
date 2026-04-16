@@ -3,6 +3,7 @@ import zipfile
 from pathlib import Path
 
 from downloaders.plugin_downloader import PluginDownloader
+from runtime_paths import RuntimePaths
 
 
 class _FakeResponse:
@@ -51,6 +52,19 @@ def _build_zip_bytes(*, slug: str, filename: str = "plugin.php", content: bytes 
 
 
 def test_download_and_extract_succeeds_with_relative_redirect(monkeypatch, tmp_path):
+    runtime_root = tmp_path / ".temodar-agent"
+    monkeypatch.setattr(
+        "downloaders.plugin_downloader.resolve_runtime_paths",
+        lambda: RuntimePaths(
+            root=runtime_root,
+            db_file=runtime_root / "temodar_agent.db",
+            logs_dir=runtime_root / "logs",
+            plugins_dir=runtime_root / "plugins",
+            semgrep_dir=runtime_root / "semgrep",
+            semgrep_outputs_dir=runtime_root / "semgrep-results",
+            approvals_dir=runtime_root / "approvals",
+        ),
+    )
     slug = "akismet"
     archive_bytes = _build_zip_bytes(slug=slug)
     calls = []
@@ -94,7 +108,7 @@ def test_download_and_extract_succeeds_with_relative_redirect(monkeypatch, tmp_p
 
     monkeypatch.setattr(PluginDownloader, "_open_pinned_response", fake_open)
 
-    downloader = PluginDownloader(base_dir=str(tmp_path))
+    downloader = PluginDownloader()
     extracted = downloader.download_and_extract(
         "https://downloads.wordpress.org/plugin/akismet.latest.zip",
         slug,
@@ -148,7 +162,21 @@ def test_download_and_extract_returns_none_on_zip_slip(monkeypatch, tmp_path):
         lambda self, url, hostname, validated_ips: (_PinnedConnection(), _PinnedResponse(malicious_payload.getvalue())),
     )
 
-    downloader = PluginDownloader(base_dir=str(tmp_path))
+    runtime_root = tmp_path / ".temodar-agent"
+    monkeypatch.setattr(
+        "downloaders.plugin_downloader.resolve_runtime_paths",
+        lambda: RuntimePaths(
+            root=runtime_root,
+            db_file=runtime_root / "temodar_agent.db",
+            logs_dir=runtime_root / "logs",
+            plugins_dir=runtime_root / "plugins",
+            semgrep_dir=runtime_root / "semgrep",
+            semgrep_outputs_dir=runtime_root / "semgrep-results",
+            approvals_dir=runtime_root / "approvals",
+        ),
+    )
+
+    downloader = PluginDownloader()
     extracted = downloader.download_and_extract(
         "https://downloads.wordpress.org/plugin/akismet.latest.zip",
         slug,
@@ -156,5 +184,5 @@ def test_download_and_extract_returns_none_on_zip_slip(monkeypatch, tmp_path):
     )
 
     assert extracted is None
-    plugin_dir = Path(tmp_path) / "Plugins" / slug
+    plugin_dir = runtime_root / "plugins" / "Plugins" / slug
     assert not plugin_dir.exists()

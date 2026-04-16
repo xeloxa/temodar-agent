@@ -18,6 +18,7 @@ from typing import List, Optional, Tuple
 from urllib.parse import urljoin, urlparse
 
 from infrastructure.http_client import get_session
+from runtime_paths import resolve_runtime_paths
 
 logger = logging.getLogger("temodar_agent.downloaders.plugin")
 
@@ -32,10 +33,11 @@ class PluginDownloader:
     MAX_COMPRESSION_RATIO = 1000  # Basic zip-bomb heuristic
     MAX_ZIP_DOWNLOAD_SIZE = 200 * 1024 * 1024
 
-    def __init__(self, base_dir: str = "."):
-        self.base_dir = Path(base_dir)
+    def __init__(self, base_dir: str | Path | None = None):
+        runtime_plugins_dir = resolve_runtime_paths().plugins_dir
+        self.base_dir = Path(base_dir) if base_dir is not None else runtime_plugins_dir
         self.plugins_dir = self.base_dir / "Plugins"
-        self.plugins_dir.mkdir(exist_ok=True)
+        self.plugins_dir.mkdir(parents=True, exist_ok=True)
 
     def _sanitize_slug(self, slug: str) -> str:
         """Sanitize slug to prevent path traversal and unsafe filesystem writes."""

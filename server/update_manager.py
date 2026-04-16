@@ -8,10 +8,11 @@ updates without mutating the host environment.
 from __future__ import annotations
 
 import logging
+import re
 import threading
 from datetime import UTC, datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 import requests
 
@@ -26,7 +27,9 @@ def utc_now() -> datetime:
 
 
 class ReleaseMetadataService:
-    """Release metadata fetching, normalization, and validation."""
+    """Tag metadata fetching, normalization, and validation."""
+
+    TAG_PATTERN = re.compile(r"^[vV]\d+(?:\.\d+)*$")
 
     def __init__(
         self,
@@ -78,6 +81,25 @@ class ReleaseMetadataService:
             "html_url": html_url,
         }
 
+    def tag_headers(self) -> Dict[str, str]:
+        return self.release_headers()
+
+    def tag_url(self, tag_name: str) -> str:
+        return f"https://github.com/xeloxa/temodar-agent/tree/{quote(tag_name, safe='/')}"
+
+    def _pick_latest_tag(self, tags: List[Dict[str, Any]]) -> Optional[str]:
+        best_tag: Optional[str] = None
+        best_version: Tuple[int, ...] = ()
+        for entry in tags:
+            name = str(entry.get("name") or "").strip()
+            if not self.TAG_PATTERN.fullmatch(name):
+                continue
+            version = self.normalized_version(name)
+            if version > best_version:
+                best_tag = name
+                best_version = version
+        return best_tag
+
     def empty_release_payload(self) -> Dict[str, Any]:
         return {
             "tag_name": None,
@@ -94,15 +116,29 @@ class ReleaseMetadataService:
             raise ValueError(f"Unsupported release API host: {parsed.hostname}")
         response = requests.get(
             self.release_api_url,
-            headers=self.release_headers(),
+            headers=self.tag_headers(),
             timeout=15,
         )
         response.raise_for_status()
-        return self.build_release_payload(response.json())
+        payload = response.json()
+        if not isinstance(payload, list):
+            raise ValueError("Unexpected tags API response shape")
+        latest_tag = self._pick_latest_tag(payload)
+        if not latest_tag:
+            return self.empty_release_payload()
+        return self.build_release_payload(
+            {
+                "tag_name": latest_tag,
+                "name": latest_tag,
+                "body": "",
+                "published_at": None,
+                "html_url": self.tag_url(latest_tag),
+            }
+        )
 
 
 class UpdateManager:
-    RELEASE_API_URL = "https://api.github.com/repos/xeloxa/temodar-agent/releases/latest"
+    RELEASE_API_URL = "https://api.github.com/repos/xeloxa/temodar-agent/tags"
     CHECK_INTERVAL = timedelta(minutes=30)
     ALLOWED_RELEASE_HOSTS = {
         "api.github.com",
@@ -114,8 +150,6 @@ class UpdateManager:
     }
     HELPER_IMAGE = "xeloxa/temodar-agent:latest"
     HELPER_DATA_VOLUME = "temodar-agent-data"
-    HELPER_PLUGINS_VOLUME = "temodar-agent-plugins"
-    HELPER_SEMGREP_VOLUME = "temodar-agent-semgrep"
     HELPER_PORT = 8080
     MESSAGE_UP_TO_DATE = "Temodar Agent is already running the latest available release."
     MESSAGE_UPDATE_AVAILABLE = "A newer release is available. Pull the latest image and rerun the container manually."
@@ -198,8 +232,6 @@ class UpdateManager:
             f"docker rm -f temodar-agent >/dev/null 2>&1 || true\n"
             f"docker run -d --name temodar-agent -p {self.HELPER_PORT}:8080 "
             f"-v {self.HELPER_DATA_VOLUME}:/home/appuser/.temodar-agent "
-            f"-v {self.HELPER_PLUGINS_VOLUME}:/app/Plugins "
-            f"-v {self.HELPER_SEMGREP_VOLUME}:/app/semgrep_results "
             f"{self.HELPER_IMAGE}"
         )
 
@@ -243,6 +275,8 @@ class UpdateManager:
             release_error=self._last_error,
         )
         helper_command = self._build_manual_update_command() if update_available else None
+        raw_release_url = release.get("html_url")
+        release_url = self._release_metadata.tag_url(latest_version) if latest_version and raw_release_url else raw_release_url
 
         return {
             "current_version": runtime_metadata["current_version"],
@@ -250,9 +284,9 @@ class UpdateManager:
             "build_id": runtime_metadata["build_id"],
             "runtime_status": runtime_metadata["runtime_status"],
             "latest_version": latest_version,
-            "release_name": release.get("name"),
-            "release_notes": release.get("body"),
-            "release_url": release.get("html_url"),
+            "release_name": release.get("name") or latest_version,
+            "release_notes": release.get("body") or "",
+            "release_url": release_url,
             "release_published_at": release.get("published_at"),
             "update_available": update_available,
             "status": status_label,

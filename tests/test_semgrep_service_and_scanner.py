@@ -1,7 +1,11 @@
 import json
+from pathlib import Path
 
 import yaml
 from fastapi import BackgroundTasks
+
+from runtime_paths import resolve_runtime_paths
+from server.routers import semgrep_helpers, semgrep_task_service
 
 from database.models import get_db, init_db
 from database.repository import ScanRepository
@@ -89,6 +93,19 @@ def test_scan_repository_can_lookup_catalog_latest_version(tmp_path):
 
     assert repo.get_catalog_latest_version("akismet") == "5.3.1"
     assert repo.get_catalog_latest_version("missing-plugin") is None
+
+
+
+def test_prepare_semgrep_output_dir_uses_runtime_root(monkeypatch, tmp_path):
+    runtime_paths = resolve_runtime_paths()
+    output_root = tmp_path / "runtime-root" / "semgrep-results"
+    monkeypatch.setattr(semgrep_task_service, "SEMGREP_OUTPUTS_DIR", output_root)
+
+    output_dir = semgrep_task_service.prepare_semgrep_output_dir(slug="akismet", scan_id=41)
+
+    assert output_dir == output_root / "akismet_41"
+    assert output_dir.exists()
+    assert runtime_paths.semgrep_outputs_dir.name == "semgrep-results"
 
 
 

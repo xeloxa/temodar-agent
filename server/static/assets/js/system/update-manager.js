@@ -30,7 +30,7 @@ function renderServerUpdateAlert(data) {
         if (data.latest_version && runtime.getAnnouncedUpdateVersion() !== data.latest_version) {
             runtime.setAnnouncedUpdateVersion(data.latest_version);
             showToast(
-                `New release detected (${latestVersion}). Open the update card to install it.`,
+                `New version detected (${latestVersion}). Open the update card to install it.`,
                 "warn"
             );
         }
@@ -77,7 +77,7 @@ function renderSystemStatus(data) {
     if (data.update_available && hasLatestVersion) {
         if (updateCallout) updateCallout.hidden = false;
         if (updateVersion) {
-            updateVersion.textContent = formatVersionLabel(data.latest_version) || "New release";
+            updateVersion.textContent = formatVersionLabel(data.latest_version) || "New version";
         }
         if (updateDescription) {
             updateDescription.textContent =
@@ -134,7 +134,7 @@ async function initiateSystemUpdate() {
     }
 
     const latestVersion =
-        formatVersionLabel(systemStatus.latest_version) || "the latest release";
+        formatVersionLabel(systemStatus.latest_version) || "the latest version";
     const confirmMessage = `${latestVersion} is available. Temodar Agent no longer runs host-side update scripts automatically. Do you want to copy the manual Docker update command?`;
     const userConfirmed = await window.showConfirm(confirmMessage);
     if (!userConfirmed) return;

@@ -6,6 +6,7 @@ from database.models import get_db, init_db
 from ai.workspace_manager import ensure_within_workspace
 from downloaders.plugin_downloader import PluginDownloader
 from downloaders.theme_downloader import ThemeDownloader
+from runtime_paths import resolve_runtime_paths
 
 
 def _empty_semgrep_payload() -> Dict[str, Any]:
@@ -54,9 +55,15 @@ def _get_completed_semgrep_scan(cursor, plugin_slug: str, plugin_version: Option
 
 
 
-def _build_relative_source_path(plugin_slug: str, is_theme: bool) -> str:
+def _build_runtime_source_path(plugin_slug: str, is_theme: bool) -> Path:
+    runtime_plugins_dir = resolve_runtime_paths().plugins_dir
     root_dir = "Themes" if is_theme else "Plugins"
-    return f"{root_dir}/{plugin_slug}/source"
+    return runtime_plugins_dir / root_dir / plugin_slug / "source"
+
+
+
+def _build_relative_source_path(plugin_slug: str, is_theme: bool) -> str:
+    return str(_build_runtime_source_path(plugin_slug, is_theme))
 
 
 
@@ -169,14 +176,16 @@ def ensure_thread_source_dir(
     if not download_url:
         return None
 
-    downloader = ThemeDownloader(base_dir=str(root_path)) if is_theme else PluginDownloader(base_dir=str(root_path))
+    runtime_plugins_dir = resolve_runtime_paths().plugins_dir
+    downloader = (
+        ThemeDownloader(base_dir=runtime_plugins_dir)
+        if is_theme
+        else PluginDownloader(base_dir=runtime_plugins_dir)
+    )
     extracted = downloader.download_and_extract(download_url, plugin_slug, verbose=False)
     if extracted is None or not extracted.exists() or not extracted.is_dir():
         return None
-    try:
-        return ensure_within_workspace(root_path, extracted).resolve()
-    except ValueError:
-        return None
+    return extracted.resolve()
 
 
 
@@ -250,10 +259,14 @@ def resolve_existing_thread_source_path(
         is_theme=is_theme,
         last_scan_session_id=last_scan_session_id,
     )
-    try:
-        candidate = ensure_within_workspace(root_path, Path(relative_path))
-    except ValueError as exc:
-        raise LookupError("Trusted source path must stay within the workspace roots.") from exc
+    candidate_path = Path(relative_path)
+    if candidate_path.is_absolute():
+        candidate = candidate_path.resolve(strict=False)
+    else:
+        try:
+            candidate = ensure_within_workspace(root_path, candidate_path)
+        except ValueError as exc:
+            raise LookupError("Trusted source path must stay within the workspace roots.") from exc
 
     if not candidate.exists() or not candidate.is_dir():
         return None

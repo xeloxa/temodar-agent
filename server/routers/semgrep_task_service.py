@@ -9,15 +9,18 @@ from typing import Any, Dict, List, Optional
 
 from database.repository import ScanRepository
 from downloaders.plugin_downloader import PluginDownloader
+from runtime_paths import resolve_runtime_paths
 from scanners.semgrep_scanner import SemgrepScanner
 from server.routers.semgrep_helpers import (
     CUSTOM_RULES_PATH,
-    SEM_RESULTS_DIR,
     _extract_bulk_plugin_meta,
     _validate_slug_or_raise,
     get_active_rulesets,
     get_disabled_config,
 )
+
+RUNTIME_PATHS = resolve_runtime_paths()
+SEMGREP_OUTPUTS_DIR = RUNTIME_PATHS.semgrep_outputs_dir
 
 logger = logging.getLogger("temodar_agent")
 BULK_SCAN_PAUSE_ITERATIONS = 5
@@ -42,18 +45,19 @@ async def download_plugin_for_semgrep(
     """Download and extract a plugin for Semgrep scanning."""
     downloader = PluginDownloader()
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(
+    plugin_path = await loop.run_in_executor(
         None,
         downloader.download_and_extract,
         str(download_url),
         slug,
         False,
     )
+    return str(plugin_path) if plugin_path is not None else None
 
 
 def prepare_semgrep_output_dir(*, slug: str, scan_id: int) -> Path:
     """Create the per-scan Semgrep output directory."""
-    output_dir = SEM_RESULTS_DIR / f"{slug}_{scan_id}"
+    output_dir = SEMGREP_OUTPUTS_DIR / f"{slug}_{scan_id}"
     output_dir.mkdir(parents=True, exist_ok=True)
     return output_dir
 

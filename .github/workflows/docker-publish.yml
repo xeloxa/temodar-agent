@@ -57,15 +57,17 @@ jobs:
 
           MINOR_TAG=$(python -c "import sys; parts = sys.argv[1].split('.'); assert len(parts) >= 2, 'Expected semantic version with at least major.minor'; print('.'.join(parts[:2]))" "${APP_VERSION}")
 
-          echo "app_version=${APP_VERSION}" >> "${GITHUB_OUTPUT}"
-          echo "git_tag=${GIT_TAG}" >> "${GITHUB_OUTPUT}"
-          echo "minor_tag=${MINOR_TAG}" >> "${GITHUB_OUTPUT}"
+          {
+            echo "app_version=${APP_VERSION}"
+            echo "git_tag=${GIT_TAG}"
+            echo "minor_tag=${MINOR_TAG}"
 
-          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
-            echo "publish_latest=false" >> "${GITHUB_OUTPUT}"
-          else
-            echo "publish_latest=true" >> "${GITHUB_OUTPUT}"
-          fi
+            if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+              echo "publish_latest=false"
+            else
+              echo "publish_latest=true"
+            fi
+          } >> "${GITHUB_OUTPUT}"
 
   validate:
     needs: metadata
@@ -76,10 +78,8 @@ jobs:
       image_build: ${{ github.sha }}
       run_smoke: true
       release_mode: true
-      publish_artifact_name: validated-release-image
 
   publish:
-
     needs:
       - metadata
       - validate
@@ -87,14 +87,11 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      - name: Download validated image artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ needs.validate.outputs.validated_image_artifact }}
-          path: /tmp
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Load validated image
-        run: docker load -i /tmp/validated-image.tar
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -122,18 +119,19 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
 
-      - name: Apply release tags to validated image
-        shell: bash
-        run: |
-          while IFS= read -r tag; do
-            [[ -n "$tag" ]] || continue
-            docker tag "${{ needs.validate.outputs.validated_image_ref }}" "$tag"
-          done <<< "${{ steps.docker_meta.outputs.tags }}"
-
-      - name: Push validated image tags
-        shell: bash
-        run: |
-          while IFS= read -r tag; do
-            [[ -n "$tag" ]] || continue
-            docker push "$tag"
-          done <<< "${{ steps.docker_meta.outputs.tags }}"
+      - name: Build and push multi-arch Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.docker_meta.outputs.tags }}
+          labels: ${{ steps.docker_meta.outputs.labels }}
+          build-args: |
+            TEMODAR_AGENT_IMAGE_VERSION=${{ needs.metadata.outputs.app_version }}
+            TEMODAR_AGENT_IMAGE_TAG=${{ needs.metadata.outputs.git_tag }}
+            TEMODAR_AGENT_IMAGE_BUILD=${{ github.sha }}
+          provenance: false
+          sbom: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

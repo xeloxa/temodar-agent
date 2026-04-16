@@ -1,9 +1,28 @@
 import json
 import sqlite3
+from pathlib import Path
 
-from ai.context_builder import build_plugin_context, resolve_thread_source_path
+from ai.context_builder import (
+    build_plugin_context,
+    ensure_thread_source_dir,
+    resolve_thread_source_path,
+)
 from ai.repository import AIRepository
 from database.models import init_db
+from runtime_paths import RuntimePaths
+
+
+
+def _runtime_paths(runtime_root):
+    return RuntimePaths(
+        root=runtime_root,
+        db_file=runtime_root / "temodar_agent.db",
+        logs_dir=runtime_root / "logs",
+        plugins_dir=runtime_root / "plugins",
+        semgrep_dir=runtime_root / "semgrep",
+        semgrep_outputs_dir=runtime_root / "semgrep-results",
+        approvals_dir=runtime_root / "approvals",
+    )
 
 
 def _insert_scan_session(cursor, status, total_found, high_risk_count):
@@ -117,7 +136,9 @@ def _insert_semgrep_finding(
     )
 
 
-def test_resolve_thread_source_path_uses_thread_scope_and_requires_matching_scan_result(tmp_path):
+def test_resolve_thread_source_path_uses_thread_scope_and_requires_matching_scan_result(monkeypatch, tmp_path):
+    runtime_root = tmp_path / ".temodar-agent"
+    monkeypatch.setattr("ai.context_builder.resolve_runtime_paths", lambda: _runtime_paths(runtime_root))
     db_path = tmp_path / "ai_context.db"
     init_db(db_path)
 
@@ -140,18 +161,21 @@ def test_resolve_thread_source_path_uses_thread_scope_and_requires_matching_scan
         )
         conn.commit()
 
+    assert session_id is not None
     assert resolve_thread_source_path(
         db_path=db_path,
         plugin_slug="hello-dolly",
         is_theme=False,
         last_scan_session_id=session_id,
-    ) == "Plugins/hello-dolly/source"
+    ) == str(runtime_root / "plugins" / "Plugins" / "hello-dolly" / "source")
     assert resolve_thread_source_path(
         db_path=db_path,
         plugin_slug="hello-dolly",
         is_theme=True,
         last_scan_session_id=session_id,
-    ) == "Themes/hello-dolly/source"
+    ) == str(runtime_root / "plugins" / "Themes" / "hello-dolly" / "source")
+
+    assert session_id is not None
 
     missing_session_id = session_id + 1
     repository = AIRepository(db_path=db_path)
@@ -317,6 +341,7 @@ def test_build_plugin_context_returns_only_selected_plugin_with_latest_relevant_
         )
         conn.commit()
 
+    assert selected_session_id is not None
     context = build_plugin_context(
         db_path=db_path,
         plugin_slug="target-plugin",
@@ -416,6 +441,7 @@ def test_build_plugin_context_does_not_return_stale_older_version_semgrep_findin
         )
         conn.commit()
 
+    assert session_id is not None
     context = build_plugin_context(
         db_path=db_path,
         plugin_slug="target-plugin",
@@ -443,6 +469,50 @@ def test_build_plugin_context_does_not_return_stale_older_version_semgrep_findin
             "summary_total_findings": 0,
         },
     }
+
+
+def test_ensure_thread_source_dir_accepts_canonical_runtime_plugin_path(monkeypatch, tmp_path):
+    runtime_root = tmp_path / ".temodar-agent"
+    monkeypatch.setattr("ai.context_builder.resolve_runtime_paths", lambda: _runtime_paths(runtime_root))
+
+    downloaded_source = runtime_root / "plugins" / "Plugins" / "akismet" / "source"
+    downloaded_source.mkdir(parents=True, exist_ok=True)
+    (downloaded_source / "plugin.php").write_text("<?php // ok", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "ai.context_builder.resolve_existing_thread_source_path",
+        lambda **__: None,
+    )
+    monkeypatch.setattr(
+        "ai.context_builder.resolve_source_download_info",
+        lambda **__: {
+            "download_url": "https://downloads.wordpress.org/plugin/akismet.latest.zip",
+            "version": "1.0.0",
+        },
+    )
+
+    class _FakeDownloader:
+        def __init__(self, base_dir):
+            assert Path(base_dir) == runtime_root / "plugins"
+
+        def download_and_extract(self, download_url, slug, verbose=False):
+            assert download_url == "https://downloads.wordpress.org/plugin/akismet.latest.zip"
+            assert slug == "akismet"
+            assert verbose is False
+            return downloaded_source
+
+    monkeypatch.setattr("ai.context_builder.PluginDownloader", _FakeDownloader)
+
+    resolved = ensure_thread_source_dir(
+        db_path=tmp_path / "ai_context.db",
+        plugin_slug="akismet",
+        is_theme=False,
+        last_scan_session_id=1,
+        root_path=tmp_path / "workspace",
+    )
+
+    assert resolved == downloaded_source.resolve()
+
 
 
 def test_build_plugin_context_returns_empty_payload_when_plugin_is_missing(tmp_path):

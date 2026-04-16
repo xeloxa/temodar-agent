@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Optional
 
 from fastapi.testclient import TestClient
@@ -10,10 +11,15 @@ UPDATE_COMMAND = (
     "docker rm -f temodar-agent >/dev/null 2>&1 || true\n"
     "docker run -d --name temodar-agent -p 8080:8080 "
     "-v temodar-agent-data:/home/appuser/.temodar-agent "
-    "-v temodar-agent-plugins:/app/Plugins "
-    "-v temodar-agent-semgrep:/app/semgrep_results "
     "xeloxa/temodar-agent:latest"
 )
+
+
+def test_update_command_fixture_uses_single_named_volume():
+    assert UPDATE_COMMAND.count("-v ") == 1
+    assert "-v temodar-agent-data:/home/appuser/.temodar-agent" in UPDATE_COMMAND
+    assert "temodar-agent-plugins" not in UPDATE_COMMAND
+    assert "temodar-agent-semgrep" not in UPDATE_COMMAND
 
 
 class _DummyRepo:
@@ -60,7 +66,7 @@ class _DummyUpdateManager:
             "latest_version": "v0.2.0" if force else "v0.1.3",
             "release_name": "v0.2.0" if force else "v0.1.3",
             "release_notes": "Bug fixes" if force else "",
-            "release_url": "https://github.com/xeloxa/temodar-agent/releases/tag/v0.2.0" if force else "https://github.com/xeloxa/temodar-agent/releases/tag/v0.1.3",
+            "release_url": "https://github.com/xeloxa/temodar-agent/tree/v0.2.0" if force else "https://github.com/xeloxa/temodar-agent/tree/v0.1.3",
             "release_published_at": "2026-04-16T00:00:00Z" if force else "2026-04-15T00:00:00Z",
             "latest_version": "v0.2.0" if force else "v0.1.3",
             "update_available": force,
@@ -93,6 +99,8 @@ class _DummyUpdateManager:
 
 def _create_test_client(monkeypatch):
     manager = _DummyUpdateManager()
+    test_db_path = Path("/Users/xeloxa/Desktop/temodar-agent/.pytest-task05-router.db")
+    monkeypatch.setattr("server.app.ensure_db_dir", lambda path=None: test_db_path)
     monkeypatch.setattr("server.app.update_manager.manager", manager)
     monkeypatch.setattr("server.routers.system.update_manager.manager", manager)
     return TestClient(create_app(), base_url="http://localhost"), manager
@@ -149,6 +157,8 @@ def test_catalog_plugin_sessions_endpoint_wraps_repo_response(monkeypatch):
 
 def test_system_update_endpoint_exposes_runtime_metadata(monkeypatch):
     manager = _DummyUpdateManager()
+    test_db_path = Path("/Users/xeloxa/Desktop/temodar-agent/.pytest-task05-router.db")
+    monkeypatch.setattr("server.app.ensure_db_dir", lambda path=None: test_db_path)
     monkeypatch.setattr("server.app.update_manager.manager", manager)
     monkeypatch.setattr("server.routers.system.update_manager.manager", manager)
     monkeypatch.setenv("TEMODAR_AGENT_IMAGE_VERSION", "0.1.3")
@@ -167,7 +177,7 @@ def test_system_update_endpoint_exposes_runtime_metadata(monkeypatch):
         "latest_version": "v0.1.3",
         "release_name": "v0.1.3",
         "release_notes": "",
-        "release_url": "https://github.com/xeloxa/temodar-agent/releases/tag/v0.1.3",
+        "release_url": "https://github.com/xeloxa/temodar-agent/tree/v0.1.3",
         "release_published_at": "2026-04-15T00:00:00Z",
         "update_available": False,
         "status": "up_to_date",
@@ -247,7 +257,7 @@ def test_system_update_status_endpoint_returns_manager_payload(monkeypatch):
         "latest_version": "v0.2.0",
         "release_name": "v0.2.0",
         "release_notes": "Bug fixes",
-        "release_url": "https://github.com/xeloxa/temodar-agent/releases/tag/v0.2.0",
+        "release_url": "https://github.com/xeloxa/temodar-agent/tree/v0.2.0",
         "release_published_at": "2026-04-16T00:00:00Z",
         "update_available": True,
         "status": "update_available",
@@ -374,6 +384,63 @@ def test_system_update_status_endpoint_returns_503_on_failure(monkeypatch):
     assert response.status_code == 503
     assert response.json()["detail"] == "Unable to check for releases right now."
 
+
+
+def test_create_app_starts_when_file_logging_is_unwritable(monkeypatch, tmp_path):
+    import logger as logger_module
+    from runtime_paths import RuntimePaths
+
+    unwritable_logs_dir = tmp_path / "blocked-home" / ".temodar-agent" / "logs"
+    runtime_root = unwritable_logs_dir.parent
+    runtime_paths = RuntimePaths(
+        root=runtime_root,
+        db_file=runtime_root / "temodar_agent.db",
+        logs_dir=unwritable_logs_dir,
+        plugins_dir=runtime_root / "plugins",
+        semgrep_dir=runtime_root / "semgrep",
+        semgrep_outputs_dir=runtime_root / "semgrep-results",
+        approvals_dir=runtime_root / "approvals",
+    )
+
+    def fail_mkdir(self, *args, **kwargs):
+        if self == unwritable_logs_dir:
+            raise PermissionError("blocked")
+        return original_mkdir(self, *args, **kwargs)
+
+    original_mkdir = Path.mkdir
+    monkeypatch.setattr(logger_module, "resolve_runtime_paths", lambda: runtime_paths)
+
+    def db_dir_ok(path=None):
+        assert path is None
+        runtime_root.mkdir(parents=True, exist_ok=True)
+        return runtime_paths.db_file
+
+    monkeypatch.setattr("server.app.ensure_db_dir", db_dir_ok)
+    monkeypatch.setattr(Path, "mkdir", fail_mkdir)
+
+    client, manager = _create_test_client(monkeypatch)
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+    assert manager.status_calls == [False]
+
+
+
+def test_create_app_fails_when_runtime_db_root_is_unwritable(monkeypatch, tmp_path):
+    blocked_db_path = tmp_path / "blocked-home" / ".temodar-agent" / "temodar_agent.db"
+
+    def fail_db_dir(path=None):
+        assert path is None
+        raise PermissionError(f"Database directory is not writable: {blocked_db_path.parent}")
+
+    monkeypatch.setattr("server.app.ensure_db_dir", fail_db_dir)
+
+    try:
+        create_app()
+        assert False, "Expected PermissionError"
+    except PermissionError as exc:
+        assert str(blocked_db_path.parent) in str(exc)
 
 
 def test_system_trigger_update_returns_manual_helper_payload(monkeypatch):

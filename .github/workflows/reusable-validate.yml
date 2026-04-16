@@ -23,11 +23,6 @@ on:
         description: Select the release-parity local image reference.
         required: true
         type: boolean
-      publish_artifact_name:
-        description: Artifact name used to export the validated image for downstream jobs.
-        required: false
-        default: validated-image
-        type: string
     outputs:
       validated_image_ref:
         description: Local image reference that passed reusable validation.
@@ -35,9 +30,6 @@ on:
       runtime_contract_ok:
         description: Whether the /api/system/update smoke contract passed.
         value: ${{ jobs.validate.outputs.runtime_contract_ok }}
-      validated_image_artifact:
-        description: Artifact containing the validated Docker image tarball.
-        value: ${{ jobs.validate.outputs.validated_image_artifact }}
 
 jobs:
   validate:
@@ -46,7 +38,6 @@ jobs:
     outputs:
       validated_image_ref: ${{ steps.image-ref.outputs.value }}
       runtime_contract_ok: ${{ steps.smoke-output.outputs.value }}
-      validated_image_artifact: ${{ steps.artifact-name.outputs.value }}
 
     steps:
       - name: Checkout repository
@@ -61,11 +52,6 @@ jobs:
           else
             echo 'value=temodar-agent:ci-validation' >> "${GITHUB_OUTPUT}"
           fi
-
-      - name: Resolve validated image artifact name
-        id: artifact-name
-        shell: bash
-        run: echo "value=${{ inputs.publish_artifact_name }}" >> "${GITHUB_OUTPUT}"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -92,7 +78,7 @@ jobs:
         run: npm --prefix ai/node_runner run test
 
       - name: Run Python tests
-        run: python -m pytest
+        run: TEMODAR_AGENT_DB=/tmp/temodar-agent-ci.db python -m pytest
 
       - name: Build Docker image
         run: |
@@ -112,21 +98,71 @@ jobs:
         if: ${{ inputs.run_smoke }}
         shell: bash
         run: |
-          docker rm -f temodar-agent-validation-smoke >/dev/null 2>&1 || true
-          trap 'docker logs temodar-agent-validation-smoke || true; docker rm -f temodar-agent-validation-smoke >/dev/null 2>&1 || true' EXIT
-          docker run -d --name temodar-agent-validation-smoke -p 18080:8080 ${{ steps.image-ref.outputs.value }}
-          for attempt in {1..30}; do
-            if curl --fail --silent http://127.0.0.1:18080/ >/dev/null; then
-              break
-            fi
-            sleep 2
-          done
-          curl --fail --silent http://127.0.0.1:18080/ >/dev/null
+          docker rm -f temodar-agent-validation-smoke temodar-agent-validation-smoke-recreated >/dev/null 2>&1 || true
+          docker volume rm temodar-agent-validation-data temodar-agent-validation-plugins temodar-agent-validation-semgrep >/dev/null 2>&1 || true
+          docker volume create temodar-agent-validation-data >/dev/null
+          docker volume create temodar-agent-validation-plugins >/dev/null
+          docker volume create temodar-agent-validation-semgrep >/dev/null
+          cleanup() {
+            docker logs temodar-agent-validation-smoke || true
+            docker logs temodar-agent-validation-smoke-recreated || true
+            docker rm -f temodar-agent-validation-smoke temodar-agent-validation-smoke-recreated >/dev/null 2>&1 || true
+            docker volume rm temodar-agent-validation-data temodar-agent-validation-plugins temodar-agent-validation-semgrep >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          wait_for_http() {
+            local url="$1"
+            for _ in {1..30}; do
+              if curl --fail --silent "$url" >/dev/null; then
+                return 0
+              fi
+              sleep 2
+            done
+            curl --fail --silent "$url" >/dev/null
+          }
+          run_container() {
+            local name="$1"
+            docker run -d --name "$name" -p 18080:8080 \
+              -v temodar-agent-validation-data:/home/appuser/.temodar-agent \
+              -v temodar-agent-validation-plugins:/app/Plugins \
+              -v temodar-agent-validation-semgrep:/app/semgrep_results \
+              ${{ steps.image-ref.outputs.value }}
+          }
+
+          verify_writable_mounts() {
+            local name="$1"
+            docker exec "$name" sh -lc 'id && touch /home/appuser/.temodar-agent/write-test && touch /app/Plugins/write-test && touch /app/semgrep_results/write-test'
+          }
+          run_container temodar-agent-validation-smoke
+          wait_for_http http://127.0.0.1:18080/health
+          verify_writable_mounts temodar-agent-validation-smoke
           curl --fail --silent http://127.0.0.1:18080/api/system/update >/tmp/temodar-system-update.json
+          docker exec temodar-agent-validation-smoke python - <<'PY'
+          from pathlib import Path
+          runtime_root = Path('/home/appuser/.temodar-agent')
+          (runtime_root / 'acceptance').mkdir(parents=True, exist_ok=True)
+          (runtime_root / 'acceptance' / 'persistence.txt').write_text('persisted across restart and recreate', encoding='utf-8')
+          PY
+          docker restart temodar-agent-validation-smoke >/dev/null
+          wait_for_http http://127.0.0.1:18080/health
+          docker exec temodar-agent-validation-smoke python - <<'PY'
+          from pathlib import Path
+          marker = Path('/home/appuser/.temodar-agent/acceptance/persistence.txt')
+          assert marker.read_text(encoding='utf-8') == 'persisted across restart and recreate'
+          PY
+          docker rm -f temodar-agent-validation-smoke >/dev/null
+          run_container temodar-agent-validation-smoke-recreated
+          wait_for_http http://127.0.0.1:18080/health
+          verify_writable_mounts temodar-agent-validation-smoke-recreated
+          curl --fail --silent http://127.0.0.1:18080/api/system/update >/tmp/temodar-system-update-recreated.json
+          docker exec temodar-agent-validation-smoke-recreated python - <<'PY'
+          from pathlib import Path
+          marker = Path('/home/appuser/.temodar-agent/acceptance/persistence.txt')
+          assert marker.read_text(encoding='utf-8') == 'persisted across restart and recreate'
+          PY
           python - <<'PY'
           import json
           from pathlib import Path
-          payload = json.loads(Path('/tmp/temodar-system-update.json').read_text(encoding='utf-8'))
           required = {
               'current_version',
               'current_tag',
@@ -135,25 +171,14 @@ jobs:
               'update_available',
               'manual_update_required',
           }
-          missing = required - payload.keys()
-          if missing:
-              raise SystemExit(f'Missing keys from /api/system/update: {sorted(missing)}')
+          for name in ('/tmp/temodar-system-update.json', '/tmp/temodar-system-update-recreated.json'):
+            payload = json.loads(Path(name).read_text(encoding='utf-8'))
+            missing = required - payload.keys()
+            if missing:
+              raise SystemExit(f'Missing keys from {name}: {sorted(missing)}')
           PY
-          docker rm -f temodar-agent-validation-smoke >/dev/null 2>&1 || true
           trap - EXIT
-
-      - name: Export validated image
-        if: ${{ inputs.release_mode }}
-        shell: bash
-        run: docker save "${{ steps.image-ref.outputs.value }}" -o /tmp/validated-image.tar
-
-      - name: Upload validated image artifact
-        if: ${{ inputs.release_mode }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.artifact-name.outputs.value }}
-          path: /tmp/validated-image.tar
-          if-no-files-found: error
+          cleanup
 
       - name: Emit smoke result for callers
         id: smoke-output

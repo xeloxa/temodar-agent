@@ -81,13 +81,11 @@ def test_reusable_validation_workflow_runs_shared_validation_chain():
         "image_build",
         "run_smoke",
         "release_mode",
-        "publish_artifact_name",
     }
-    assert set(outputs) == {"validated_image_ref", "runtime_contract_ok", "validated_image_artifact"}
+    assert set(outputs) == {"validated_image_ref", "runtime_contract_ok"}
     assert step_names == [
         "Checkout repository",
         "Resolve validated image reference",
-        "Resolve validated image artifact name",
         "Set up Python",
         "Set up Node.js",
         "Install Python dependencies",
@@ -97,16 +95,14 @@ def test_reusable_validation_workflow_runs_shared_validation_chain():
         "Run Python tests",
         "Build Docker image",
         "Smoke test Docker image",
-        "Export validated image",
-        "Upload validated image artifact",
         "Emit smoke result for callers",
     ]
-    assert steps[8]["run"] == CANONICAL_NODE_TEST_COMMAND
+    assert steps[7]["run"] == CANONICAL_NODE_TEST_COMMAND
 
 
 def test_reusable_validation_workflow_uses_one_canonical_node_test_command_for_all_parity_runs():
     workflow = _read_workflow("reusable-validate.yml")
-    run_node_tests_step = workflow["jobs"]["validate"]["steps"][8]
+    run_node_tests_step = workflow["jobs"]["validate"]["steps"][7]
 
     assert run_node_tests_step["name"] == "Run Node tests"
     assert run_node_tests_step["run"] == CANONICAL_NODE_TEST_COMMAND
@@ -177,8 +173,9 @@ def test_release_workflow_routes_publish_through_reusable_validation():
         "image_build": "${{ github.sha }}",
         "run_smoke": True,
         "release_mode": True,
-        "publish_artifact_name": "validated-release-image",
     }
+    assert validate_job["with"]["release_mode"] is True
+    assert validate_job["with"]["run_smoke"] is True
     assert publish_job["needs"] == ["metadata", "validate"]
 
 
@@ -189,13 +186,12 @@ def test_publish_job_depends_on_validation_before_push_steps():
 
     assert publish_job["needs"] == ["metadata", "validate"]
     assert step_names == [
-        "Download validated image artifact",
-        "Load validated image",
+        "Checkout repository",
+        "Set up QEMU",
         "Set up Docker Buildx",
         "Log in to Docker Hub",
         "Set up Docker metadata",
-        "Apply release tags to validated image",
-        "Push validated image tags",
+        "Build and push multi-arch Docker image",
     ]
 
 
@@ -218,14 +214,19 @@ def test_release_workflow_keeps_dockerhub_credentials_scoped_to_publish_only_beh
 
 
 
-def test_release_workflow_publish_tags_preserve_runtime_metadata_alignment():
+def test_release_workflow_buildx_publish_preserves_runtime_metadata_alignment():
     workflow = _read_workflow("docker-publish.yml")
     publish_job = workflow["jobs"]["publish"]
-    apply_release_tags_step = publish_job["steps"][-2]
+    build_and_push_step = publish_job["steps"][-1]
 
-    run_script = apply_release_tags_step["run"]
-    assert 'docker tag "${{ needs.validate.outputs.validated_image_ref }}" "$tag"' in run_script
-    assert 'done <<< "${{ steps.docker_meta.outputs.tags }}"' in run_script
+    assert build_and_push_step["uses"] == "docker/build-push-action@v6"
+    assert build_and_push_step["with"]["platforms"] == "linux/amd64,linux/arm64"
+    assert build_and_push_step["with"]["push"] is True
+    assert build_and_push_step["with"]["build-args"] == (
+        "TEMODAR_AGENT_IMAGE_VERSION=${{ needs.metadata.outputs.app_version }}\n"
+        "TEMODAR_AGENT_IMAGE_TAG=${{ needs.metadata.outputs.git_tag }}\n"
+        "TEMODAR_AGENT_IMAGE_BUILD=${{ github.sha }}\n"
+    )
 
     validate_with = workflow["jobs"]["validate"]["with"]
     assert validate_with["image_version"] == "${{ needs.metadata.outputs.app_version }}"
@@ -233,7 +234,155 @@ def test_release_workflow_publish_tags_preserve_runtime_metadata_alignment():
     assert validate_with["image_build"] == "${{ github.sha }}"
     assert validate_with["release_mode"] is True
     assert validate_with["run_smoke"] is True
-    assert validate_with["publish_artifact_name"] == "validated-release-image"
+    assert build_and_push_step["with"]["provenance"] is False
+    assert build_and_push_step["with"]["sbom"] is False
+    assert build_and_push_step["with"]["cache-from"] == "type=gha"
+    assert build_and_push_step["with"]["cache-to"] == "type=gha,mode=max"
+    assert build_and_push_step["with"]["tags"] == "${{ steps.docker_meta.outputs.tags }}"
+    assert build_and_push_step["with"]["labels"] == "${{ steps.docker_meta.outputs.labels }}"
+    assert build_and_push_step["with"]["context"] == "."
+
+
+
+def test_reusable_validation_smoke_waits_for_health_before_update_contract():
+    workflow = _read_workflow("reusable-validate.yml")
+    smoke_step = workflow["jobs"]["validate"]["steps"][-2]
+    run_script = smoke_step["run"]
+
+    assert "wait_for_http http://127.0.0.1:18080/health" in run_script
+    assert "curl --fail --silent http://127.0.0.1:18080/api/system/update >/tmp/temodar-system-update.json" in run_script
+    assert run_script.index("wait_for_http http://127.0.0.1:18080/health") < run_script.index(
+        "curl --fail --silent http://127.0.0.1:18080/api/system/update >/tmp/temodar-system-update.json"
+    )
+
+
+def test_reusable_validation_smoke_uses_documented_runtime_mounts():
+    workflow = _read_workflow("reusable-validate.yml")
+    smoke_step = workflow["jobs"]["validate"]["steps"][-2]
+    run_script = smoke_step["run"]
+
+    assert 'docker run -d --name "$name" -p 18080:8080 \\' in run_script
+    assert '-v temodar-agent-validation-data:/home/appuser/.temodar-agent \\' in run_script
+    assert '-v temodar-agent-validation-plugins:/app/Plugins \\' in run_script
+    assert '-v temodar-agent-validation-semgrep:/app/semgrep_results \\' in run_script
+    assert "docker volume create temodar-agent-validation-data" in run_script
+    assert "docker volume create temodar-agent-validation-plugins" in run_script
+    assert "docker volume create temodar-agent-validation-semgrep" in run_script
+
+
+
+def test_reusable_validation_smoke_verifies_mounted_paths_are_writable():
+    workflow = _read_workflow("reusable-validate.yml")
+    smoke_step = workflow["jobs"]["validate"]["steps"][-2]
+    run_script = smoke_step["run"]
+
+    assert "verify_writable_mounts()" in run_script
+    assert "verify_writable_mounts temodar-agent-validation-smoke" in run_script
+    assert "verify_writable_mounts temodar-agent-validation-smoke-recreated" in run_script
+    assert "touch /home/appuser/.temodar-agent/write-test" in run_script
+    assert "touch /app/Plugins/write-test" in run_script
+    assert "touch /app/semgrep_results/write-test" in run_script
+    assert run_script.index("verify_writable_mounts temodar-agent-validation-smoke") < run_script.index(
+        "curl --fail --silent http://127.0.0.1:18080/api/system/update >/tmp/temodar-system-update.json"
+    )
+    assert run_script.index("verify_writable_mounts temodar-agent-validation-smoke-recreated") < run_script.index(
+        "curl --fail --silent http://127.0.0.1:18080/api/system/update >/tmp/temodar-system-update-recreated.json"
+    )
+
+
+
+def test_reusable_validation_smoke_verifies_restart_and_recreate_persistence_contract():
+    workflow = _read_workflow("reusable-validate.yml")
+    smoke_step = workflow["jobs"]["validate"]["steps"][-2]
+    run_script = smoke_step["run"]
+
+    assert "docker exec temodar-agent-validation-smoke python - <<'PY'" in run_script
+    assert "docker restart temodar-agent-validation-smoke >/dev/null" in run_script
+    assert "docker rm -f temodar-agent-validation-smoke >/dev/null" in run_script
+    assert "run_container temodar-agent-validation-smoke-recreated" in run_script
+    assert "curl --fail --silent http://127.0.0.1:18080/api/system/update >/tmp/temodar-system-update-recreated.json" in run_script
+    assert "persisted across restart and recreate" in run_script
+    assert "Path('/home/appuser/.temodar-agent/acceptance/persistence.txt')" in run_script
+
+
+def test_reusable_validation_smoke_cleans_up_volume_and_containers():
+    workflow = _read_workflow("reusable-validate.yml")
+    smoke_step = workflow["jobs"]["validate"]["steps"][-2]
+    run_script = smoke_step["run"]
+
+    assert "docker rm -f temodar-agent-validation-smoke temodar-agent-validation-smoke-recreated >/dev/null 2>&1 || true" in run_script
+    assert "docker volume rm temodar-agent-validation-data temodar-agent-validation-plugins temodar-agent-validation-semgrep >/dev/null 2>&1 || true" in run_script
+    assert "trap cleanup EXIT" in run_script
+    assert "docker logs temodar-agent-validation-smoke || true" in run_script
+    assert "docker logs temodar-agent-validation-smoke-recreated || true" in run_script
+    assert "cleanup" in run_script
+    assert "trap - EXIT" in run_script
+
+
+def test_reusable_validation_smoke_checks_update_contract_after_recreate():
+    workflow = _read_workflow("reusable-validate.yml")
+    smoke_step = workflow["jobs"]["validate"]["steps"][-2]
+    run_script = smoke_step["run"]
+
+    assert "for name in ('/tmp/temodar-system-update.json', '/tmp/temodar-system-update-recreated.json'):" in run_script
+    assert "missing = required - payload.keys()" in run_script
+    assert "manual_update_required" in run_script
+    assert "runtime_status" in run_script
+    assert "current_tag" in run_script
+    assert "current_version" in run_script
+    assert "update_available" in run_script
+    assert "status" in run_script
+    assert "Missing keys from {name}: {sorted(missing)}" in run_script
+    assert run_script.index("/tmp/temodar-system-update-recreated.json") > run_script.index(
+        "/tmp/temodar-system-update.json"
+    )
+
+
+
+def test_dockerfile_defines_healthcheck():
+    dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+
+    assert "HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=6" in dockerfile
+    assert "http://127.0.0.1:8080/health" in dockerfile
+
+
+
+def test_app_exposes_health_endpoint_as_public_route():
+    app_text = (ROOT / "server" / "app.py").read_text(encoding="utf-8")
+
+    assert '"/health"' in app_text
+    assert '@app.get("/health")' in app_text
+    assert 'JSONResponse({"status": "ok"})' in app_text
+
+
+
+def test_health_endpoint_returns_ok(monkeypatch):
+    monkeypatch.setattr(
+        "server.app.update_manager.manager.get_status",
+        lambda force=False: {"status": "ok"},
+    )
+    monkeypatch.setattr(
+        "server.app.ensure_db_dir",
+        lambda path=None: Path("/Users/xeloxa/Desktop/temodar-agent/.pytest-task05-workflow.db"),
+    )
+    from fastapi.testclient import TestClient
+    from server.app import create_app
+
+    client = TestClient(create_app(), base_url="http://localhost")
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.request.url.path == "/health"
+    assert response.request.headers["host"] == "localhost"
+    assert response.request.method == "GET"
+    assert response.request.url.scheme == "http"
+    assert str(response.request.url).startswith("http://localhost/health")
+    assert response.request.headers["accept"] == "*/*"
+    assert response.request.headers["connection"] == "keep-alive"
+    assert response.request.headers["user-agent"]
+    assert client.headers.get("host", "") == ""
 
 
 
@@ -246,6 +395,8 @@ def test_release_workflow_metadata_derivation_checks_tag_to_version_alignment():
     assert 'CLEAN_TAG="${GIT_TAG#v}"' in run_script
     assert 'if [[ "${APP_VERSION}" != "${CLEAN_TAG}" ]]; then' in run_script
     assert 'echo "Tag ${GIT_TAG} does not match app_meta.py version ${APP_VERSION}" >&2' in run_script
-    assert 'echo "app_version=${APP_VERSION}" >> "${GITHUB_OUTPUT}"' in run_script
-    assert 'echo "git_tag=${GIT_TAG}" >> "${GITHUB_OUTPUT}"' in run_script
-    assert 'echo "minor_tag=${MINOR_TAG}" >> "${GITHUB_OUTPUT}"' in run_script
+    assert '{' in run_script
+    assert 'echo "app_version=${APP_VERSION}"' in run_script
+    assert 'echo "git_tag=${GIT_TAG}"' in run_script
+    assert 'echo "minor_tag=${MINOR_TAG}"' in run_script
+    assert '} >> "${GITHUB_OUTPUT}"' in run_script

@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from server.update_manager import UpdateManager
 
 
@@ -109,7 +111,8 @@ def test_status_degrades_when_runtime_metadata_malformed(monkeypatch, tmp_path):
     assert status["current_version"] == "unknown"
     assert status["current_tag"] == "unknown"
     assert status["runtime_status"] == "degraded"
-    assert status["status"] == "up_to_date"
+    assert status["status"] == "degraded"
+    assert "Runtime version metadata is incomplete" in status["message"]
 
 
 def test_get_status_does_not_write_host_update_request_file(monkeypatch, tmp_path):
@@ -244,3 +247,52 @@ def test_runtime_metadata_falls_back_without_wrapper_runtime_file(monkeypatch, t
     assert status["runtime_status"] == "fallback"
     assert status["status"] == "up_to_date"
     assert not (tmp_path / ".temodar-agent" / "update-runtime.json").exists()
+
+
+def test_status_uses_runtime_version_for_release_comparison(monkeypatch, tmp_path):
+    manager = _TestUpdateManager(tmp_path / ".temodar-agent")
+    monkeypatch.setenv("TEMODAR_AGENT_IMAGE_VERSION", "0.1.2")
+    monkeypatch.setenv("TEMODAR_AGENT_IMAGE_TAG", "v0.1.2")
+
+    def resolve_release(*args, **kwargs):
+        del args, kwargs
+        return {
+            "tag_name": "v0.1.3",
+            "name": "v0.1.3",
+            "body": "Bug fixes",
+            "html_url": "https://github.com/xeloxa/temodar-agent/releases/tag/v0.1.3",
+            "published_at": "2026-04-16T00:00:00Z",
+        }
+
+    monkeypatch.setattr(manager, "_resolve_release_for_status", resolve_release)
+
+    status = manager.get_status()
+
+    assert status["current_version"] == "0.1.2"
+    assert status["current_tag"] == "v0.1.2"
+    assert status["latest_version"] == "v0.1.3"
+    assert status["update_available"] is True
+    assert status["status"] == "update_available"
+
+
+def test_release_payload_rejects_unsupported_html_host(tmp_path):
+    manager = _TestUpdateManager(tmp_path / ".temodar-agent")
+
+    with pytest.raises(ValueError, match="Unsupported release URL host"):
+        manager._release_metadata.build_release_payload(
+            {
+                "tag_name": "v0.1.3",
+                "name": "v0.1.3",
+                "body": "Bug fixes",
+                "html_url": "https://example.com/releases/v0.1.3",
+                "published_at": "2026-04-16T00:00:00Z",
+            }
+        )
+
+
+def test_release_payload_rejects_unsupported_api_host(tmp_path):
+    manager = _TestUpdateManager(tmp_path / ".temodar-agent")
+    manager._release_metadata.release_api_url = "https://example.com/releases/latest"
+
+    with pytest.raises(ValueError, match="Unsupported release API host"):
+        manager._release_metadata.fetch_release()

@@ -53,3 +53,36 @@ jobs:
             --build-arg TEMODAR_AGENT_IMAGE_BUILD=${GITHUB_SHA} \
             -t temodar-agent:ci \
             .
+
+      - name: Smoke test Docker image
+        shell: bash
+        run: |
+          docker rm -f temodar-agent-ci-smoke >/dev/null 2>&1 || true
+          trap 'docker logs temodar-agent-ci-smoke || true; docker rm -f temodar-agent-ci-smoke >/dev/null 2>&1 || true' EXIT
+          docker run -d --name temodar-agent-ci-smoke -p 18080:8080 temodar-agent:ci
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:18080/ >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          curl --fail --silent http://127.0.0.1:18080/ >/dev/null
+          curl --fail --silent http://127.0.0.1:18080/api/system/update >/tmp/temodar-system-update.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          payload = json.loads(Path('/tmp/temodar-system-update.json').read_text(encoding='utf-8'))
+          required = {
+              'current_version',
+              'current_tag',
+              'runtime_status',
+              'status',
+              'update_available',
+              'manual_update_required',
+          }
+          missing = required - payload.keys()
+          if missing:
+              raise SystemExit(f'Missing keys from /api/system/update: {sorted(missing)}')
+          PY
+          docker rm -f temodar-agent-ci-smoke >/dev/null 2>&1 || true
+          trap - EXIT

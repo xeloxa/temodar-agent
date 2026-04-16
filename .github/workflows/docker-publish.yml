@@ -85,6 +85,48 @@ jobs:
       - name: Run Python tests
         run: pytest
 
+      - name: Build release image
+        run: |
+          docker build \
+            --build-arg TEMODAR_AGENT_IMAGE_VERSION=${{ steps.meta.outputs.app_version }} \
+            --build-arg TEMODAR_AGENT_IMAGE_TAG=${{ steps.meta.outputs.git_tag }} \
+            --build-arg TEMODAR_AGENT_IMAGE_BUILD=${GITHUB_SHA} \
+            -t temodar-agent:release \
+            .
+
+      - name: Smoke test release image
+        shell: bash
+        run: |
+          docker rm -f temodar-agent-publish-smoke >/dev/null 2>&1 || true
+          trap 'docker logs temodar-agent-publish-smoke || true; docker rm -f temodar-agent-publish-smoke >/dev/null 2>&1 || true' EXIT
+          docker run -d --name temodar-agent-publish-smoke -p 18081:8080 temodar-agent:release
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:18081/ >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          curl --fail --silent http://127.0.0.1:18081/ >/dev/null
+          curl --fail --silent http://127.0.0.1:18081/api/system/update >/tmp/temodar-publish-system-update.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          payload = json.loads(Path('/tmp/temodar-publish-system-update.json').read_text(encoding='utf-8'))
+          required = {
+              'current_version',
+              'current_tag',
+              'runtime_status',
+              'status',
+              'update_available',
+              'manual_update_required',
+          }
+          missing = required - payload.keys()
+          if missing:
+              raise SystemExit(f'Missing keys from /api/system/update: {sorted(missing)}')
+          PY
+          docker rm -f temodar-agent-publish-smoke >/dev/null 2>&1 || true
+          trap - EXIT
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 

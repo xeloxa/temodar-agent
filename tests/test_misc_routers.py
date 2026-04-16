@@ -55,12 +55,22 @@ class _DummyUpdateManager:
         return {
             "current_version": "0.1.3",
             "current_tag": "v0.1.3",
+            "build_id": "build-123",
+            "runtime_status": "ready",
+            "latest_version": "v0.2.0" if force else "v0.1.3",
+            "release_name": "v0.2.0" if force else "v0.1.3",
+            "release_notes": "Bug fixes" if force else "",
+            "release_url": "https://github.com/xeloxa/temodar-agent/releases/tag/v0.2.0" if force else "https://github.com/xeloxa/temodar-agent/releases/tag/v0.1.3",
+            "release_published_at": "2026-04-16T00:00:00Z" if force else "2026-04-15T00:00:00Z",
             "latest_version": "v0.2.0" if force else "v0.1.3",
             "update_available": force,
             "status": "update_available" if force else "up_to_date",
             "update_command": UPDATE_COMMAND if force else None,
             "message": "A newer release is available." if force else "Temodar Agent is already running the latest available release.",
             "manual_update_required": force,
+            "manual_update_message": "Automatic updates are no longer supported. Pull the latest image and rerun the container manually." if force else None,
+            "checked_at": "2026-04-16T00:00:00Z",
+            "last_error": None,
         }
 
     def get_manual_update_payload(self):
@@ -152,12 +162,21 @@ def test_system_update_endpoint_exposes_runtime_metadata(monkeypatch):
     assert response.json() == {
         "current_version": "0.1.3",
         "current_tag": "v0.1.3",
+        "build_id": "build-123",
+        "runtime_status": "ready",
         "latest_version": "v0.1.3",
+        "release_name": "v0.1.3",
+        "release_notes": "",
+        "release_url": "https://github.com/xeloxa/temodar-agent/releases/tag/v0.1.3",
+        "release_published_at": "2026-04-15T00:00:00Z",
         "update_available": False,
         "status": "up_to_date",
         "update_command": None,
         "message": "Temodar Agent is already running the latest available release.",
         "manual_update_required": False,
+        "manual_update_message": None,
+        "checked_at": "2026-04-16T00:00:00Z",
+        "last_error": None,
     }
     assert client.app.version == "0.1.3"
     assert manager.status_calls == [False, False]
@@ -223,12 +242,21 @@ def test_system_update_status_endpoint_returns_manager_payload(monkeypatch):
     assert response.json() == {
         "current_version": "0.1.3",
         "current_tag": "v0.1.3",
+        "build_id": "build-123",
+        "runtime_status": "ready",
         "latest_version": "v0.2.0",
+        "release_name": "v0.2.0",
+        "release_notes": "Bug fixes",
+        "release_url": "https://github.com/xeloxa/temodar-agent/releases/tag/v0.2.0",
+        "release_published_at": "2026-04-16T00:00:00Z",
         "update_available": True,
         "status": "update_available",
         "update_command": UPDATE_COMMAND,
         "message": "A newer release is available.",
         "manual_update_required": True,
+        "manual_update_message": "Automatic updates are no longer supported. Pull the latest image and rerun the container manually.",
+        "checked_at": "2026-04-16T00:00:00Z",
+        "last_error": None,
     }
     assert manager.status_calls[-1] is True
 

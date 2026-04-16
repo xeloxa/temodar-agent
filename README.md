@@ -196,6 +196,8 @@ docker run -d --name temodar-agent -p 8080:8080 \
   xeloxa/temodar-agent:latest
 ```
 
+`latest` is recommended if you want the newest published image, but starting an existing container with `docker start temodar-agent` does not pull new images. To move to a newer `latest`, pull the image again and recreate the container.
+
 ### Run a specific version
 
 If you want a pinned release instead of `latest`, use a version tag:
@@ -242,7 +244,7 @@ docker run -d --name temodar-agent -p 8080:8080 \
   xeloxa/temodar-agent:latest
 ```
 
-The in-app update UI only notifies you about new releases and can copy this manual Docker update command.
+The in-app update UI only notifies you about new releases and can copy this manual Docker update command. If you installed a pinned tag such as `v0.1.3`, update by pulling and rerunning the newer pinned tag you want rather than assuming `docker start` will move you forward.
 
 ## Star History
 

@@ -11,6 +11,7 @@ import logging
 import threading
 from datetime import UTC, datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urlparse
 
 import requests
 
@@ -32,11 +33,9 @@ class ReleaseMetadataService:
         *,
         release_api_url: str,
         allowed_release_hosts: set[str],
-        current_version: str,
     ) -> None:
         self.release_api_url = release_api_url
         self.allowed_release_hosts = allowed_release_hosts
-        self.current_version = current_version
 
     def normalized_version(self, version: Optional[str]) -> Tuple[int, ...]:
         if not version:
@@ -49,8 +48,8 @@ class ReleaseMetadataService:
             nums.append(int(digits) if digits else 0)
         return tuple(nums)
 
-    def is_newer_release(self, latest_version: Optional[str]) -> bool:
-        current_tuple = self.normalized_version(self.current_version)
+    def is_newer_release(self, current_version: Optional[str], latest_version: Optional[str]) -> bool:
+        current_tuple = self.normalized_version(current_version)
         latest_tuple = self.normalized_version(latest_version)
         if not latest_tuple:
             return False
@@ -66,13 +65,17 @@ class ReleaseMetadataService:
         }
 
     def build_release_payload(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        html_url = data.get("html_url")
+        if html_url:
+            parsed = urlparse(str(html_url))
+            if parsed.hostname not in self.allowed_release_hosts:
+                raise ValueError(f"Unsupported release URL host: {parsed.hostname}")
         return {
             "tag_name": data.get("tag_name"),
             "name": data.get("name") or data.get("tag_name"),
             "body": data.get("body") or "",
             "published_at": data.get("published_at"),
-            "html_url": data.get("html_url"),
-            "update_available": self.is_newer_release(data.get("tag_name")),
+            "html_url": html_url,
         }
 
     def empty_release_payload(self) -> Dict[str, Any]:
@@ -86,6 +89,9 @@ class ReleaseMetadataService:
         }
 
     def fetch_release(self) -> Dict[str, Any]:
+        parsed = urlparse(self.release_api_url)
+        if parsed.hostname not in self.allowed_release_hosts:
+            raise ValueError(f"Unsupported release API host: {parsed.hostname}")
         response = requests.get(
             self.release_api_url,
             headers=self.release_headers(),
@@ -127,7 +133,6 @@ class UpdateManager:
         self._release_metadata = ReleaseMetadataService(
             release_api_url=self.RELEASE_API_URL,
             allowed_release_hosts=self.ALLOWED_RELEASE_HOSTS,
-            current_version=__version__,
         )
 
     def _runtime_metadata_payload(self) -> Dict[str, Any]:
@@ -201,29 +206,38 @@ class UpdateManager:
     def _resolve_status_label(
         self,
         *,
+        runtime_status: str,
         latest_version: Optional[str],
         update_available: bool,
         release_error: Optional[str],
     ) -> str:
+        if runtime_status == "degraded":
+            return "degraded"
         if release_error and not latest_version:
             return "degraded"
         if update_available:
             return "update_available"
         return "up_to_date"
 
-    def _resolve_status_message(self, status_label: str) -> str:
+    def _resolve_status_message(self, status_label: str, runtime_status: str) -> str:
         if status_label == "update_available":
             return self.MESSAGE_UPDATE_AVAILABLE
         if status_label == "degraded":
+            if runtime_status == "degraded":
+                return "Runtime version metadata is incomplete. Release information may be unreliable right now."
             return self.MESSAGE_DEGRADED
         return self.MESSAGE_UP_TO_DATE
 
     def _build_status_payload(self, release: Dict[str, Any]) -> Dict[str, Any]:
         runtime_metadata = self._runtime_metadata_payload()
+        current_release_ref = runtime_metadata["current_tag"]
+        if current_release_ref == "unknown":
+            current_release_ref = runtime_metadata["current_version"]
         latest_version = release.get("tag_name")
-        update_available = bool(release.get("update_available"))
+        update_available = self._release_metadata.is_newer_release(current_release_ref, latest_version)
         checked_at = self._cache_time.isoformat().replace("+00:00", "Z") if self._cache_time else None
         status_label = self._resolve_status_label(
+            runtime_status=runtime_metadata["runtime_status"],
             latest_version=latest_version,
             update_available=update_available,
             release_error=self._last_error,
@@ -242,7 +256,7 @@ class UpdateManager:
             "release_published_at": release.get("published_at"),
             "update_available": update_available,
             "status": status_label,
-            "message": self._resolve_status_message(status_label),
+            "message": self._resolve_status_message(status_label, runtime_metadata["runtime_status"]),
             "update_command": helper_command,
             "manual_update_required": update_available,
             "manual_update_message": self.MESSAGE_MANUAL_UPDATE_ONLY if update_available else None,

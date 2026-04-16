@@ -1,7 +1,11 @@
 .git
 .gitignore
 venv
+.venv
 __pycache__
+.agents
+.claude
+.compozy
 *.pyc
 *.pyo
 *.pyd

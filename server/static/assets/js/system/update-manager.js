@@ -72,7 +72,6 @@ function renderSystemStatus(data) {
     const updateVersion = document.getElementById("update-latest-version");
     const releaseLink = document.getElementById("update-release-link");
     const updateProgress = document.getElementById("update-progress");
-    const updateProgressText = document.getElementById("update-progress-text");
 
     const hasLatestVersion = !!(data.latest_version && String(data.latest_version).trim());
     if (data.update_available && hasLatestVersion) {
@@ -83,28 +82,21 @@ function renderSystemStatus(data) {
         if (updateDescription) {
             updateDescription.textContent =
                 truncateText(data.release_notes) ||
-                "Release notes are not available yet.";
+                data.message ||
+                "Pull the latest image and rerun the container manually.";
         }
         if (releaseLink) {
             releaseLink.href = data.release_url || "#";
         }
         if (updateButton) {
-            updateButton.disabled = !!data.in_progress;
-            updateButton.textContent = data.in_progress
-                ? "UPDATING…"
-                : "REBUILD & UPDATE";
+            updateButton.disabled = false;
+            updateButton.textContent = "COPY UPDATE COMMAND";
         }
     } else if (updateCallout) {
         updateCallout.hidden = true;
     }
 
-    if (data.in_progress) {
-        if (updateProgress) updateProgress.hidden = false;
-        if (updateProgressText) {
-            updateProgressText.textContent =
-                data.progress_message || "Downloading update…";
-        }
-    } else if (updateProgress) {
+    if (updateProgress) {
         updateProgress.hidden = true;
     }
 
@@ -141,14 +133,9 @@ async function initiateSystemUpdate() {
         return;
     }
 
-    if (systemStatus.in_progress) {
-        showToast("An update is already running.", "info");
-        return;
-    }
-
     const latestVersion =
         formatVersionLabel(systemStatus.latest_version) || "the latest release";
-    const confirmMessage = `${latestVersion} will be pulled from source, a fresh Docker image will be built, and the container will be restarted automatically. Do you want to continue?`;
+    const confirmMessage = `${latestVersion} is available. Temodar Agent no longer runs host-side update scripts automatically. Do you want to copy the manual Docker update command?`;
     const userConfirmed = await window.showConfirm(confirmMessage);
     if (!userConfirmed) return;
 
@@ -162,15 +149,19 @@ async function initiateSystemUpdate() {
         }
 
         const payload = await resp.json();
-        showToast(
-            payload.message || "Update started. Rebuild and restart are running in the background.",
-            "success"
-        );
+        const updateCommand = String(payload.update_command || "").trim();
+        if (!updateCommand) {
+            showToast(payload.message || "Manual update instructions are unavailable right now.", "info");
+            return;
+        }
+
+        await navigator.clipboard.writeText(updateCommand);
+        showToast(payload.message || "Manual Docker update command copied to clipboard.", "success");
         loadSystemStatus(true);
     } catch (err) {
-        console.error("Failed to trigger update:", err);
+        console.error("Failed to prepare update helper:", err);
         showToast(
-            `Failed to start update: ${err.message || "unknown error"}`,
+            `Failed to prepare manual update instructions: ${err.message || "unknown error"}`,
             "error"
         );
     }

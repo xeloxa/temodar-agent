@@ -20,7 +20,7 @@ from slowapi.errors import RateLimitExceeded
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import PlainTextResponse, Response
 
-from app_meta import __version__
+from app_meta import get_runtime_metadata
 from server import update_manager
 from server.limiter import limiter
 from server.routers import ai, catalog, favorites, scans, semgrep, system
@@ -117,11 +117,12 @@ def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
     setup_logging()
     logger.info("Starting Temodar Agent Server...")
+    runtime_metadata = get_runtime_metadata()
 
     app = FastAPI(
         title="Temodar Agent Dashboard",
         description="WordPress Plugin & Theme Security Scanner",
-        version=__version__,
+        version=runtime_metadata.current_version,
     )
     configure_application(app)
     return app

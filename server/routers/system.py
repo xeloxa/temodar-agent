@@ -15,7 +15,7 @@ logger = logging.getLogger("temodar_agent.update.router")
 
 @router.get("/update")
 async def get_update_status(force: bool = False):
-    """Return the current version, the latest release, and update progress."""
+    """Return the current version, latest release, and manual update helper state."""
     try:
         status_payload = await asyncio.to_thread(update_manager.manager.get_status, force)
         return status_payload
@@ -29,18 +29,13 @@ async def get_update_status(force: bool = False):
 
 @router.post("/update")
 async def trigger_update():
-    """Queue a Docker-managed source update, rebuild, and container restart."""
+    """Return deprecated manual-only update guidance instead of triggering host mutation."""
     try:
-        message = await asyncio.to_thread(update_manager.manager.start_update)
-        return {"status": "started", "message": message}
-    except RuntimeError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=str(exc),
-        ) from exc
+        payload = await asyncio.to_thread(update_manager.manager.get_manual_update_payload)
+        return payload
     except Exception as exc:  # pragma: no cover - unexpected error handling
-        logger.exception("Update trigger failed")
+        logger.exception("Update helper request failed")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Update could not be started.",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Unable to prepare manual update instructions right now.",
         ) from exc

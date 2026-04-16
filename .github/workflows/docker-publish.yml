@@ -1,0 +1,124 @@
+name: Docker Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+env:
+  DOCKERHUB_REPOSITORY: xeloxa/temodar-agent
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: ai/node_runner/package-lock.json
+
+      - name: Derive release metadata
+        id: meta
+        shell: bash
+        run: |
+          APP_VERSION=$(python -c "import re, pathlib; text = pathlib.Path('app_meta.py').read_text(encoding='utf-8'); match = re.search(r'^__version__\\s*=\\s*[\"\']([^\"\']+)[\"\']', text, re.MULTILINE); print(match.group(1) if match else '')")
+
+          if [[ -z "${APP_VERSION}" ]]; then
+            echo "Unable to determine __version__ from app_meta.py" >&2
+            exit 1
+          fi
+
+          if [[ "${GITHUB_REF_TYPE}" != "tag" ]]; then
+            echo "This workflow only publishes from git tags." >&2
+            exit 1
+          fi
+
+          GIT_TAG="${GITHUB_REF_NAME}"
+          CLEAN_TAG="${GIT_TAG#v}"
+
+          if [[ "${APP_VERSION}" != "${CLEAN_TAG}" ]]; then
+            echo "Tag ${GIT_TAG} does not match app_meta.py version ${APP_VERSION}" >&2
+            exit 1
+          fi
+
+          MINOR_TAG=$(python -c "import sys; parts = sys.argv[1].split('.'); assert len(parts) >= 2, 'Expected semantic version with at least major.minor'; print('.'.join(parts[:2]))" "${APP_VERSION}")
+
+          echo "app_version=${APP_VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "git_tag=${GIT_TAG}" >> "${GITHUB_OUTPUT}"
+          echo "minor_tag=${MINOR_TAG}" >> "${GITHUB_OUTPUT}"
+
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            echo "publish_latest=false" >> "${GITHUB_OUTPUT}"
+          else
+            echo "publish_latest=true" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Install Python dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt
+
+      - name: Install Node dependencies
+        run: npm --prefix ai/node_runner ci
+
+      - name: Build Node runner
+        run: npm --prefix ai/node_runner run build
+
+      - name: Run Node tests
+        run: npm --prefix ai/node_runner run test
+
+      - name: Run Python tests
+        run: pytest
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker metadata
+        id: docker_meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKERHUB_REPOSITORY }}
+          tags: |
+            type=raw,value=latest,enable=${{ steps.meta.outputs.publish_latest }}
+            type=raw,value=${{ steps.meta.outputs.app_version }}
+            type=raw,value=${{ steps.meta.outputs.git_tag }}
+            type=raw,value=${{ steps.meta.outputs.minor_tag }}
+          labels: |
+            org.opencontainers.image.title=Temodar Agent
+            org.opencontainers.image.description=AI agent-powered WordPress security scanner
+            org.opencontainers.image.version=${{ steps.meta.outputs.app_version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.docker_meta.outputs.tags }}
+          labels: ${{ steps.docker_meta.outputs.labels }}
+          build-args: |
+            TEMODAR_AGENT_IMAGE_VERSION=${{ steps.meta.outputs.app_version }}
+            TEMODAR_AGENT_IMAGE_TAG=${{ steps.meta.outputs.git_tag }}
+            TEMODAR_AGENT_IMAGE_BUILD=${{ github.sha }}

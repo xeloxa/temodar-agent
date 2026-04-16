@@ -1,6 +1,19 @@
+from typing import Optional
+
 from fastapi.testclient import TestClient
 
 from server.app import create_app
+
+
+UPDATE_COMMAND = (
+    "docker pull xeloxa/temodar-agent:latest\n"
+    "docker rm -f temodar-agent >/dev/null 2>&1 || true\n"
+    "docker run -d --name temodar-agent -p 8080:8080 "
+    "-v temodar-agent-data:/home/appuser/.temodar-agent "
+    "-v temodar-agent-plugins:/app/Plugins "
+    "-v temodar-agent-semgrep:/app/semgrep_results "
+    "xeloxa/temodar-agent:latest"
+)
 
 
 class _DummyRepo:
@@ -31,21 +44,41 @@ class _DummyRepo:
 class _DummyUpdateManager:
     def __init__(self):
         self.status_calls = []
-        self.update_calls = 0
-        self.raise_status = None
-        self.raise_update = None
+        self.manual_payload_calls = 0
+        self.raise_status: Optional[Exception] = None
+        self.raise_manual_payload: Optional[Exception] = None
 
     def get_status(self, force=False):
         self.status_calls.append(force)
         if self.raise_status:
             raise self.raise_status
-        return {"status": "ok", "force": force}
+        return {
+            "current_version": "0.1.3",
+            "current_tag": "v0.1.3",
+            "latest_version": "v0.2.0" if force else "v0.1.3",
+            "update_available": force,
+            "status": "update_available" if force else "up_to_date",
+            "update_command": UPDATE_COMMAND if force else None,
+            "message": "A newer release is available." if force else "Temodar Agent is already running the latest available release.",
+            "manual_update_required": force,
+        }
 
-    def start_update(self):
-        self.update_calls += 1
-        if self.raise_update:
-            raise self.raise_update
-        return "Update started"
+    def get_manual_update_payload(self):
+        self.manual_payload_calls += 1
+        if self.raise_manual_payload:
+            raise self.raise_manual_payload
+        return {
+            "status": "update_available",
+            "message": "Automatic updates are no longer supported. Pull the latest image and rerun the container manually.",
+            "current_version": "0.1.3",
+            "current_tag": "v0.1.3",
+            "latest_version": "v0.2.0",
+            "update_available": True,
+            "update_command": UPDATE_COMMAND,
+            "manual_update_required": True,
+            "manual_update_only": True,
+            "deprecated": True,
+        }
 
 
 def _create_test_client(monkeypatch):
@@ -101,6 +134,33 @@ def test_catalog_plugin_sessions_endpoint_wraps_repo_response(monkeypatch):
             {"slug": "akismet", "is_theme": False, "limit": 5},
         )
     ]
+
+
+
+def test_system_update_endpoint_exposes_runtime_metadata(monkeypatch):
+    manager = _DummyUpdateManager()
+    monkeypatch.setattr("server.app.update_manager.manager", manager)
+    monkeypatch.setattr("server.routers.system.update_manager.manager", manager)
+    monkeypatch.setenv("TEMODAR_AGENT_IMAGE_VERSION", "0.1.3")
+    monkeypatch.setenv("TEMODAR_AGENT_IMAGE_TAG", "v0.1.3")
+    monkeypatch.setenv("TEMODAR_AGENT_IMAGE_BUILD", "build-123")
+    client = TestClient(create_app(), base_url="http://localhost")
+
+    response = client.get("/api/system/update")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "current_version": "0.1.3",
+        "current_tag": "v0.1.3",
+        "latest_version": "v0.1.3",
+        "update_available": False,
+        "status": "up_to_date",
+        "update_command": None,
+        "message": "Temodar Agent is already running the latest available release.",
+        "manual_update_required": False,
+    }
+    assert client.app.version == "0.1.3"
+    assert manager.status_calls == [False, False]
 
 
 
@@ -160,8 +220,115 @@ def test_system_update_status_endpoint_returns_manager_payload(monkeypatch):
     response = client.get("/api/system/update", params={"force": "true"})
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "force": True}
+    assert response.json() == {
+        "current_version": "0.1.3",
+        "current_tag": "v0.1.3",
+        "latest_version": "v0.2.0",
+        "update_available": True,
+        "status": "update_available",
+        "update_command": UPDATE_COMMAND,
+        "message": "A newer release is available.",
+        "manual_update_required": True,
+    }
     assert manager.status_calls[-1] is True
+
+
+def test_system_update_status_endpoint_returns_degraded_payload(monkeypatch):
+    client, manager = _create_test_client(monkeypatch)
+
+    def degraded_status(force=False):
+        manager.status_calls.append(force)
+        return {
+            "current_version": "0.1.3",
+            "current_tag": "v0.1.3",
+            "latest_version": None,
+            "update_available": False,
+            "status": "degraded",
+            "update_command": None,
+            "message": "Release information is temporarily unavailable.",
+            "manual_update_required": False,
+        }
+
+    manager.get_status = degraded_status
+
+    response = client.get("/api/system/update")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "current_version": "0.1.3",
+        "current_tag": "v0.1.3",
+        "latest_version": None,
+        "update_available": False,
+        "status": "degraded",
+        "update_command": None,
+        "message": "Release information is temporarily unavailable.",
+        "manual_update_required": False,
+    }
+    assert manager.status_calls[-1] is False
+
+
+def test_system_update_status_endpoint_payload_is_stable_across_states(monkeypatch):
+    client, _ = _create_test_client(monkeypatch)
+
+    up_to_date_response = client.get("/api/system/update")
+    update_available_response = client.get("/api/system/update", params={"force": "true"})
+
+    up_to_date_payload = up_to_date_response.json()
+    update_available_payload = update_available_response.json()
+
+    assert up_to_date_response.status_code == 200
+    assert update_available_response.status_code == 200
+    assert set(up_to_date_payload.keys()) == set(update_available_payload.keys())
+    assert up_to_date_payload["status"] == "up_to_date"
+    assert update_available_payload["status"] == "update_available"
+    assert up_to_date_payload["current_version"] == update_available_payload["current_version"] == "0.1.3"
+    assert up_to_date_payload["current_tag"] == update_available_payload["current_tag"] == "v0.1.3"
+    assert up_to_date_payload["update_command"] is None
+    assert update_available_payload["update_command"] == UPDATE_COMMAND
+    assert up_to_date_payload["update_available"] is False
+    assert update_available_payload["update_available"] is True
+    assert up_to_date_payload["manual_update_required"] is False
+    assert update_available_payload["manual_update_required"] is True
+    assert up_to_date_payload["latest_version"] == "v0.1.3"
+    assert update_available_payload["latest_version"] == "v0.2.0"
+
+
+def test_system_update_endpoint_degraded_payload_is_frontend_consumable(monkeypatch):
+    client, manager = _create_test_client(monkeypatch)
+
+    def degraded_status(force=False):
+        manager.status_calls.append(force)
+        return {
+            "current_version": "0.1.3",
+            "current_tag": "v0.1.3",
+            "latest_version": None,
+            "update_available": False,
+            "status": "degraded",
+            "update_command": None,
+            "message": "Release information is temporarily unavailable.",
+            "manual_update_required": False,
+        }
+
+    manager.get_status = degraded_status
+
+    response = client.get("/api/system/update")
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert set(payload.keys()) == {
+        "current_version",
+        "current_tag",
+        "latest_version",
+        "update_available",
+        "status",
+        "update_command",
+        "message",
+        "manual_update_required",
+    }
+    assert payload["status"] == "degraded"
+    assert payload["latest_version"] is None
+    assert payload["update_command"] is None
+    assert payload["update_available"] is False
 
 
 
@@ -176,22 +343,87 @@ def test_system_update_status_endpoint_returns_503_on_failure(monkeypatch):
 
 
 
-def test_system_trigger_update_maps_runtime_error_to_409(monkeypatch):
-    client, manager = _create_test_client(monkeypatch)
-    manager.raise_update = RuntimeError("already running")
-
-    response = client.post("/api/system/update")
-
-    assert response.status_code == 409
-    assert response.json()["detail"] == "already running"
-
-
-
-def test_system_trigger_update_returns_started_payload(monkeypatch):
+def test_system_trigger_update_returns_manual_helper_payload(monkeypatch):
     client, manager = _create_test_client(monkeypatch)
 
     response = client.post("/api/system/update")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "started", "message": "Update started"}
-    assert manager.update_calls == 1
+    assert response.json() == {
+        "status": "update_available",
+        "message": "Automatic updates are no longer supported. Pull the latest image and rerun the container manually.",
+        "current_version": "0.1.3",
+        "current_tag": "v0.1.3",
+        "latest_version": "v0.2.0",
+        "update_available": True,
+        "update_command": UPDATE_COMMAND,
+        "manual_update_required": True,
+        "manual_update_only": True,
+        "deprecated": True,
+    }
+    assert manager.manual_payload_calls == 1
+
+
+def test_system_trigger_update_is_deprecated_manual_only_endpoint(monkeypatch):
+    client, manager = _create_test_client(monkeypatch)
+
+    response = client.post("/api/system/update")
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["deprecated"] is True
+    assert payload["manual_update_only"] is True
+    assert payload["update_command"] == UPDATE_COMMAND
+    assert manager.manual_payload_calls == 1
+    assert manager.status_calls == [False]
+
+
+def test_system_trigger_update_degraded_payload_stays_notify_only(monkeypatch):
+    client, manager = _create_test_client(monkeypatch)
+
+    def degraded_manual_payload():
+        manager.manual_payload_calls += 1
+        return {
+            "status": "degraded",
+            "message": "Automatic updates are no longer supported. Pull the latest image and rerun the container manually.",
+            "current_version": "0.1.3",
+            "current_tag": "v0.1.3",
+            "latest_version": None,
+            "update_available": False,
+            "update_command": None,
+            "manual_update_required": False,
+            "manual_update_only": True,
+            "deprecated": True,
+        }
+
+    manager.get_manual_update_payload = degraded_manual_payload
+
+    response = client.post("/api/system/update")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "degraded",
+        "message": "Automatic updates are no longer supported. Pull the latest image and rerun the container manually.",
+        "current_version": "0.1.3",
+        "current_tag": "v0.1.3",
+        "latest_version": None,
+        "update_available": False,
+        "update_command": None,
+        "manual_update_required": False,
+        "manual_update_only": True,
+        "deprecated": True,
+    }
+    assert manager.manual_payload_calls == 1
+    assert manager.status_calls == [False]
+
+
+
+def test_system_trigger_update_returns_503_when_helper_generation_fails(monkeypatch):
+    client, manager = _create_test_client(monkeypatch)
+    manager.raise_manual_payload = RuntimeError("boom")
+
+    response = client.post("/api/system/update")
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Unable to prepare manual update instructions right now."
+    assert manager.manual_payload_calls == 1

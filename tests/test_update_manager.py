@@ -1,7 +1,9 @@
-import json
 from pathlib import Path
 
 from server.update_manager import UpdateManager
+
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 class _TestUpdateManager(UpdateManager):
@@ -9,81 +11,236 @@ class _TestUpdateManager(UpdateManager):
         self._test_state_dir = state_dir
         super().__init__()
 
-    @property
-    def state_dir(self) -> Path:
-        self._test_state_dir.mkdir(parents=True, exist_ok=True)
-        return self._test_state_dir
 
-
-def _write_runtime_file(manager: UpdateManager):
-    runtime_file = manager.runtime_file
-    runtime_file.write_text(
-        json.dumps(
-            {
-                "workspace_root": "/workspace",
-                "image_name": "temodar-agent:latest",
-                "container_name": "temodar-agent-app",
-                "port": "8080",
-                "app_state_path": "/state",
-                "plugins_path": "/workspace/Plugins",
-                "semgrep_results_path": "/workspace/semgrep_results",
-            }
-        ),
-        encoding="utf-8",
-    )
-    return runtime_file
-
-
-def test_status_works_when_runtime_metadata_exists(monkeypatch, tmp_path):
+def test_status_reads_runtime_metadata_from_env(monkeypatch, tmp_path):
     manager = _TestUpdateManager(tmp_path / ".temodar-agent")
-    _write_runtime_file(manager)
-    monkeypatch.setattr(manager, "_is_running_in_docker", lambda: True)
-    monkeypatch.setattr(
-        manager,
-        "_resolve_release_for_status",
-        lambda force: {"tag_name": None, "update_available": False},
-    )
+    monkeypatch.setenv("TEMODAR_AGENT_IMAGE_VERSION", "0.1.3")
+    monkeypatch.setenv("TEMODAR_AGENT_IMAGE_TAG", "v0.1.3")
+    monkeypatch.setenv("TEMODAR_AGENT_IMAGE_BUILD", "build-123")
+    def resolve_release(*args, **kwargs):
+        del args, kwargs
+        return {"tag_name": None, "update_available": False}
+
+    monkeypatch.setattr(manager, "_resolve_release_for_status", resolve_release)
 
     status = manager.get_status()
 
-    assert status["current_version"]
+    assert status["current_version"] == "0.1.3"
+    assert status["current_tag"] == "v0.1.3"
+    assert status["build_id"] == "build-123"
+    assert status["runtime_status"] == "ready"
+    assert status["status"] == "up_to_date"
 
 
-def test_start_update_queues_host_request_for_docker_managed_install(monkeypatch, tmp_path):
+def test_status_returns_up_to_date_without_helper_command(monkeypatch, tmp_path):
     manager = _TestUpdateManager(tmp_path / ".temodar-agent")
-    _write_runtime_file(manager)
-    monkeypatch.setattr(manager, "_is_running_in_docker", lambda: True)
-    monkeypatch.setattr(
-        manager,
-        "get_status",
-        lambda force=True: {"update_available": True, "latest_version": "v9.9.9"},
-    )
+    monkeypatch.setenv("TEMODAR_AGENT_IMAGE_VERSION", "0.1.3")
+    monkeypatch.setenv("TEMODAR_AGENT_IMAGE_TAG", "v0.1.3")
+    def resolve_release(*args, **kwargs):
+        del args, kwargs
+        return {"tag_name": "v0.1.3", "update_available": False}
 
-    called = {}
+    monkeypatch.setattr(manager, "_resolve_release_for_status", resolve_release)
 
-    def _fake_start(latest_tag):
-        called["tag"] = latest_tag
-        return "started"
+    status = manager.get_status()
 
-    monkeypatch.setattr(manager, "_start_docker_update", _fake_start)
-
-    result = manager.start_update()
-
-    assert result == "started"
-    assert called == {"tag": "v9.9.9"}
+    assert status["status"] == "up_to_date"
+    assert status["update_available"] is False
+    assert status["update_command"] is None
+    assert status["manual_update_required"] is False
 
 
-def test_start_docker_update_persists_host_request(tmp_path):
+def test_status_returns_helper_command_when_new_release_exists(monkeypatch, tmp_path):
     manager = _TestUpdateManager(tmp_path / ".temodar-agent")
-    _write_runtime_file(manager)
+    monkeypatch.setenv("TEMODAR_AGENT_IMAGE_VERSION", "0.1.3")
+    monkeypatch.setenv("TEMODAR_AGENT_IMAGE_TAG", "v0.1.3")
+    def resolve_release(*args, **kwargs):
+        del args, kwargs
+        return {
+            "tag_name": "v0.2.0",
+            "name": "v0.2.0",
+            "body": "Bug fixes",
+            "html_url": "https://github.com/xeloxa/temodar-agent/releases/tag/v0.2.0",
+            "published_at": "2026-04-16T00:00:00Z",
+            "update_available": True,
+        }
 
-    message = manager._start_docker_update("v2.1.0")
-    state = json.loads(manager.state_file.read_text(encoding="utf-8"))
+    monkeypatch.setattr(manager, "_resolve_release_for_status", resolve_release)
 
-    assert "Host supervisor" in message
-    assert state["update_in_progress"] is True
-    assert state["last_update_status"] == "requested"
-    assert state["latest_requested_tag"] == "v2.1.0"
-    assert state["requested_version"] == "v2.1.0"
-    assert state["request_id"]
-    assert "Host supervisor" in state["last_update_message"]
+    status = manager.get_status()
+
+    assert status["status"] == "update_available"
+    assert status["update_available"] is True
+    assert status["manual_update_required"] is True
+    assert "docker pull xeloxa/temodar-agent:latest" in status["update_command"]
+    assert "-v temodar-agent-data:/home/appuser/.temodar-agent" in status["update_command"]
+    assert "-v temodar-agent-plugins:/app/Plugins" in status["update_command"]
+    assert "-v temodar-agent-semgrep:/app/semgrep_results" in status["update_command"]
+
+
+def test_status_degrades_when_release_lookup_fails(monkeypatch, tmp_path):
+    manager = _TestUpdateManager(tmp_path / ".temodar-agent")
+    monkeypatch.setenv("TEMODAR_AGENT_IMAGE_VERSION", "0.1.3")
+    monkeypatch.setenv("TEMODAR_AGENT_IMAGE_TAG", "v0.1.3")
+    monkeypatch.setattr(manager, "_fetch_release", lambda *_: (_ for _ in ()).throw(RuntimeError("boom")))
+
+    status = manager.get_status(force=True)
+
+    assert status["status"] == "degraded"
+    assert status["update_available"] is False
+    assert status["update_command"] is None
+    assert status["last_error"] == "RuntimeError: boom"
+    assert "temporarily unavailable" in status["message"]
+
+
+def test_status_degrades_when_runtime_metadata_malformed(monkeypatch, tmp_path):
+    manager = _TestUpdateManager(tmp_path / ".temodar-agent")
+    monkeypatch.setenv("TEMODAR_AGENT_IMAGE_VERSION", "0.1.3")
+    monkeypatch.delenv("TEMODAR_AGENT_IMAGE_TAG", raising=False)
+    monkeypatch.delenv("TEMODAR_AGENT_IMAGE_BUILD", raising=False)
+    def resolve_release(*args, **kwargs):
+        del args, kwargs
+        return {"tag_name": None, "update_available": False}
+
+    monkeypatch.setattr(manager, "_resolve_release_for_status", resolve_release)
+
+    status = manager.get_status()
+
+    assert status["current_version"] == "unknown"
+    assert status["current_tag"] == "unknown"
+    assert status["runtime_status"] == "degraded"
+    assert status["status"] == "up_to_date"
+
+
+def test_get_status_does_not_write_host_update_request_file(monkeypatch, tmp_path):
+    manager = _TestUpdateManager(tmp_path / ".temodar-agent")
+    monkeypatch.setenv("TEMODAR_AGENT_IMAGE_VERSION", "0.1.3")
+    monkeypatch.setenv("TEMODAR_AGENT_IMAGE_TAG", "v0.1.3")
+    def resolve_release(*args, **kwargs):
+        del args, kwargs
+        return {"tag_name": "v0.2.0", "update_available": True}
+
+    monkeypatch.setattr(manager, "_resolve_release_for_status", resolve_release)
+
+    status = manager.get_status(force=True)
+
+    assert status["update_available"] is True
+    assert not (tmp_path / ".temodar-agent" / "update_state.json").exists()
+
+
+def test_manual_update_payload_is_notify_only(monkeypatch, tmp_path):
+    manager = _TestUpdateManager(tmp_path / ".temodar-agent")
+    monkeypatch.setenv("TEMODAR_AGENT_IMAGE_VERSION", "0.1.3")
+    monkeypatch.setenv("TEMODAR_AGENT_IMAGE_TAG", "v0.1.3")
+    def get_status(*args, **kwargs):
+        del args, kwargs
+        return {
+            "status": "update_available",
+            "current_version": "0.1.3",
+            "current_tag": "v0.1.3",
+            "latest_version": "v0.2.0",
+            "update_available": True,
+            "update_command": "docker pull xeloxa/temodar-agent:latest",
+            "manual_update_required": True,
+        }
+
+    monkeypatch.setattr(manager, "get_status", get_status)
+
+    payload = manager.get_manual_update_payload()
+
+    assert payload == {
+        "status": "update_available",
+        "message": "Automatic updates are no longer supported. Pull the latest image and rerun the container manually.",
+        "current_version": "0.1.3",
+        "current_tag": "v0.1.3",
+        "latest_version": "v0.2.0",
+        "update_available": True,
+        "update_command": "docker pull xeloxa/temodar-agent:latest",
+        "manual_update_required": True,
+        "manual_update_only": True,
+        "deprecated": True,
+    }
+
+
+def test_manual_update_payload_is_deprecated_even_when_release_lookup_degraded(monkeypatch, tmp_path):
+    manager = _TestUpdateManager(tmp_path / ".temodar-agent")
+    def get_status(*args, **kwargs):
+        del args, kwargs
+        return {
+            "status": "degraded",
+            "current_version": "0.1.3",
+            "current_tag": "v0.1.3",
+            "latest_version": None,
+            "update_available": False,
+            "update_command": None,
+            "manual_update_required": False,
+        }
+
+    monkeypatch.setattr(manager, "get_status", get_status)
+
+    payload = manager.get_manual_update_payload()
+
+    assert payload["status"] == "degraded"
+    assert payload["deprecated"] is True
+    assert payload["manual_update_only"] is True
+    assert payload["update_command"] is None
+    assert payload["latest_version"] is None
+    assert payload["current_tag"] == "v0.1.3"
+
+
+def test_legacy_host_update_scripts_are_removed_from_supported_runtime_path():
+    assert not (ROOT / "run.sh").exists()
+    assert not (ROOT / "infrastructure" / "host_update_watcher.sh").exists()
+    assert not (ROOT / "infrastructure" / "update_docker_install.sh").exists()
+
+
+def test_readme_uses_image_first_install_flow_without_legacy_scripts():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert "docker pull xeloxa/temodar-agent:latest" in readme
+    assert "docker run -d --name temodar-agent -p 8080:8080" in readme
+    assert "-v temodar-agent-data:/home/appuser/.temodar-agent" in readme
+    assert "-v temodar-agent-plugins:/app/Plugins" in readme
+    assert "-v temodar-agent-semgrep:/app/semgrep_results" in readme
+    assert "./run.sh" not in readme
+    assert "host-side update watcher" not in readme
+    assert "rebuild and restart everything" not in readme
+    assert "git clone https://github.com/xeloxa/temodar-agent.git" not in readme
+
+
+def test_manual_update_command_does_not_reference_legacy_scripts(tmp_path):
+    manager = _TestUpdateManager(tmp_path / ".temodar-agent")
+
+    command = manager._build_manual_update_command()
+
+    assert "docker pull xeloxa/temodar-agent:latest" in command
+    assert "-v temodar-agent-data:/home/appuser/.temodar-agent" in command
+    assert "-v temodar-agent-plugins:/app/Plugins" in command
+    assert "-v temodar-agent-semgrep:/app/semgrep_results" in command
+    assert "run.sh" not in command
+    assert "update_docker_install.sh" not in command
+    assert "host_update_watcher.sh" not in command
+    assert "docker build" not in command
+    assert "git pull" not in command
+    assert "update_state.json" not in command
+    assert "update-runtime.json" not in command
+
+
+def test_runtime_metadata_falls_back_without_wrapper_runtime_file(monkeypatch, tmp_path):
+    manager = _TestUpdateManager(tmp_path / ".temodar-agent")
+    monkeypatch.delenv("TEMODAR_AGENT_IMAGE_VERSION", raising=False)
+    monkeypatch.delenv("TEMODAR_AGENT_IMAGE_TAG", raising=False)
+    monkeypatch.delenv("TEMODAR_AGENT_IMAGE_BUILD", raising=False)
+    def resolve_release(*args, **kwargs):
+        del args, kwargs
+        return {"tag_name": None, "update_available": False}
+
+    monkeypatch.setattr(manager, "_resolve_release_for_status", resolve_release)
+
+    status = manager.get_status()
+
+    assert status["current_version"] == "0.1.3"
+    assert status["current_tag"] == "0.1.3"
+    assert status["runtime_status"] == "fallback"
+    assert status["status"] == "up_to_date"
+    assert not (tmp_path / ".temodar-agent" / "update-runtime.json").exists()
